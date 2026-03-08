@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#060c16"/>
+  <title>TJ Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{min-height:100vh;background:#060c16;color:#e2e8f0;font-family:'DM Sans','Segoe UI',sans-serif;-webkit-text-size-adjust:100%}
+    a{text-decoration:none;-webkit-tap-highlight-color:transparent}
+    button{-webkit-tap-highlight-color:transparent;cursor:pointer;font-family:inherit}
+
+    .header{
+      background:linear-gradient(135deg,#0a1628,#0d1c35);
+      border-bottom:1px solid #1a2a3a;
+      padding:0 20px;
+      display:flex;align-items:center;justify-content:space-between;
+      height:56px;position:sticky;top:0;z-index:100;
+    }
+    .logo{display:flex;align-items:center;gap:12px}
+    .logo-icon{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#00c896,#0080c0);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff;flex-shrink:0}
+    .logo-title{font-size:15px;font-weight:800;color:#e2e8f0}
+    .logo-sub{font-size:10px;color:#3a8070;letter-spacing:.06em}
+
+    .nav-links{display:flex;gap:8px}
+    .nav-btn{display:flex;align-items:center;gap:5px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;border:1.5px solid;transition:all .15s}
+    .nav-btn.daily{color:#4285f4;border-color:#1e3070;background:rgba(66,133,244,.08)}
+    .nav-btn.daily:hover{background:rgba(66,133,244,.18)}
+    .nav-btn.trade{color:#00c896;border-color:#1a3a2e;background:rgba(0,200,150,.08)}
+    .nav-btn.trade:hover{background:rgba(0,200,150,.18)}
+    .nav-btn.backtest{color:#9382fa;border-color:#3d2e6a;background:rgba(147,130,250,.08)}
+    .nav-btn.backtest:hover{background:rgba(147,130,250,.18)}
+
+    .main{max-width:min(94vw, 2200px);margin:0 auto;padding:clamp(14px,2vw,32px) clamp(12px,2vw,32px) 60px}
+
+    .section-title{font-size:10px;font-weight:700;color:#3a4a5e;text-transform:uppercase;letter-spacing:.09em;margin-bottom:12px}
+
+    .period-bar{display:flex;gap:5px;margin-bottom:20px;background:#0d1420;border-radius:10px;padding:4px;border:1px solid #1a2535}
+    .period-btn{flex:1;padding:8px 4px;border-radius:7px;border:none;background:transparent;font-size:12px;font-weight:600;color:#4a5a6e;transition:all .15s}
+    .period-btn.active{background:#1a2535;color:#00c896;box-shadow:0 1px 6px rgba(0,200,150,.2)}
+
+    .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+    @media(max-width:480px){.stats-row{grid-template-columns:1fr 1fr}}
+    .stat-box{background:#0d1420;border:1px solid #1a2535;border-radius:10px;padding:12px 14px}
+    .stat-label{font-size:9px;color:#3a4a5e;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+    .stat-value{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace}
+    .stat-sub{font-size:11px;font-weight:600;margin-top:3px}
+
+    .last-bar{background:#0d1420;border:1px solid #1a2535;border-radius:10px;padding:11px 14px;margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    .last-item{display:flex;flex-direction:column;gap:2px}
+    .last-item .lbl{font-size:9px;color:#3a4a5e;text-transform:uppercase;letter-spacing:.06em}
+    .last-item .val{font-size:13px;font-weight:700}
+
+    .total-card{background:#0a1020;border:1px solid #1a2535;border-radius:12px;padding:16px;margin-bottom:12px}
+    .chart-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+    .chart-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3a8070}
+    .chart-badge{font-size:9px;color:#3a4a5e;letter-spacing:.04em}
+    .chart-current{font-size:24px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#e2e8f0}
+    .chart-delta{font-size:12px;font-weight:700;margin-left:8px}
+    .wrap-tall{position:relative;height:150px}
+
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:560px){.grid2{grid-template-columns:1fr}}
+    .acc-card{background:#0a1020;border:1px solid #1a2535;border-radius:11px;padding:14px}
+    .wrap-short{position:relative;height:80px}
+
+    .empty{text-align:center;padding:60px 20px;color:#2a3a4e}
+    .empty-icon{font-size:48px;margin-bottom:12px}
+    .empty-text{font-size:14px;line-height:1.6;color:#3a4a5e}
+
+    ::-webkit-scrollbar{height:4px;width:4px}
+    ::-webkit-scrollbar-track{background:#060c16}
+    ::-webkit-scrollbar-thumb{background:#1e3a2e;border-radius:3px}
+
+    /* Light theme */
+    body.light{background:#f0f4fb;color:#1e293b}
+    body.light .header{background:linear-gradient(135deg,#ffffff,#f8fafc);border-color:#e2e8f0}
+    body.light .logo-title{color:#1e293b}
+    body.light .logo-sub{color:#059669}
+    body.light .period-bar{background:#ffffff;border-color:#e2e8f0}
+    body.light .period-btn{color:#94a3b8}
+    body.light .period-btn.active{background:#f1f5f9;color:#059669}
+    body.light .stat-box{background:#ffffff;border-color:#e2e8f0}
+    body.light .stat-label{color:#94a3b8}
+    body.light .last-bar{background:#ffffff;border-color:#e2e8f0}
+    body.light .last-item .lbl{color:#94a3b8}
+    body.light .total-card{background:#ffffff;border-color:#e2e8f0}
+    body.light .chart-name{color:#059669}
+    body.light .chart-current{color:#1e293b}
+    body.light .chart-badge{color:#94a3b8}
+    body.light .acc-card{background:#ffffff;border-color:#e2e8f0}
+    body.light .section-title{color:#94a3b8}
+    body.light .empty-text{color:#94a3b8}
+    body.light ::-webkit-scrollbar-track{background:#f1f5f9}
+    body.light ::-webkit-scrollbar-thumb{background:#94a3b8}
+    body.light .nav-btn.daily{color:#1a73e8;border-color:#c5d8ff;background:rgba(66,133,244,.08)}
+    body.light .nav-btn.trade{color:#059669;border-color:#a7f3d0;background:rgba(5,150,105,.08)}
+    body.light .nav-btn.backtest{color:#7c6ef0;border-color:#c4bcf8;background:rgba(124,110,240,.08)}
+
+    /* ── Fluid responsive ──────────────────────────────────────────── */
+    :root {
+      --px: clamp(12px, 3.5vw, 40px);
+      --max-w: clamp(320px, 95vw, 1100px);
+      --fs-base: clamp(13px, 1.8vw, 16px);
+    }
+    #root > div,
+    body > div.dashboard-wrap { max-width: var(--max-w) !important; }
+    @media (max-width:360px){ :root{--px:10px} }
+    /* ──────────────────────────────────────────────────────────────── */
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">TJ</div>
+    <div>
+      <div class="logo-title">Trading Journal</div>
+      <div class="logo-sub">DASHBOARD</div>
+    </div>
+  </div>
+  <div class="nav-links">
+    <a href="https://docs.google.com/spreadsheets/d/1lfFzdORhOzPr9Zbk1rEzMWk8XUhZ4p0bhhterZISC5E/edit?usp=sharing" target="_blank" rel="noreferrer" class="nav-btn" style="color:#34d399;border-color:#1a3a2e;background:rgba(52,211,153,.08)" title="Google Таблица">📊</a>
+    <button id="themeBtn" onclick="toggleTheme()" class="nav-btn" style="border-color:#1a2535;color:#8892a4;background:transparent;font-size:16px;padding:7px 10px">🌙</button>
+    <a href="/TJ/Daily.html" class="nav-btn daily">📅 Daily</a>
+    <a href="/TJ/Trade.html" class="nav-btn trade">📈 Trade</a>
+    <a href="/TJ/Backtest.html" class="nav-btn backtest">🔬 Backtest</a>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Period switcher -->
+  <div class="period-bar">
+    <button class="period-btn" data-days="7">7 дней</button>
+    <button class="period-btn" data-days="30">30 дней</button>
+    <button class="period-btn active" data-days="0">Всё время</button>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="stats-row">
+    <div class="stat-box">
+      <div class="stat-label">Записей Daily</div>
+      <div class="stat-value" id="statEntries" style="color:#60a5fa">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Суммарный баланс</div>
+      <div class="stat-value" id="statTotal" style="color:#00c896">—</div>
+      <div class="stat-sub" id="statTotalSub"></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Изменение за период</div>
+      <div class="stat-value" id="statDelta">—</div>
+      <div class="stat-sub" id="statDeltaPct"></div>
+    </div>
+  </div>
+
+  <!-- Last entry bar -->
+  <div class="last-bar" id="lastBar" style="display:none">
+    <div class="last-item">
+      <span class="lbl">Последняя запись</span>
+      <span class="val" id="lastDate" style="color:#e2e8f0">—</span>
+    </div>
+    <div class="last-item">
+      <span class="lbl">Настроение</span>
+      <span class="val" id="lastMood" style="color:#00c896">—</span>
+    </div>
+    <div class="last-item">
+      <span class="lbl">Сон</span>
+      <span class="val" id="lastSleep" style="color:#a78bfa">—</span>
+    </div>
+    <div class="last-item">
+      <span class="lbl">Активность</span>
+      <span class="val" id="lastActivity" style="color:#facc15">—</span>
+    </div>
+  </div>
+
+  <!-- Total balance chart -->
+  <div class="total-card" id="totalCard" style="display:none">
+    <div class="chart-header">
+      <div>
+        <div class="chart-name">Суммарный баланс</div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-top:4px">
+          <span class="chart-current" id="totalValue">—</span>
+          <span class="chart-delta" id="totalDelta"></span>
+        </div>
+      </div>
+      <div class="chart-badge" id="totalAccList"></div>
+    </div>
+    <div class="wrap-tall"><canvas id="chartTotal"></canvas></div>
+  </div>
+
+  <!-- Per-account grid -->
+  <div class="section-title" id="accTitle" style="display:none">По счетам</div>
+  <div class="grid2" id="accGrid"></div>
+
+  <!-- Empty -->
+  <div class="empty" id="emptyState">
+    <div class="empty-icon">📊</div>
+    <div class="empty-text">Нет данных для отображения.<br>Заполните хотя бы 2 записи в Daily Journal<br>с балансами счетов.</div>
+  </div>
+
+</div>
+
+<script>
+const ACCOUNTS = ["А Финам","С Финам","A Bybit","С Bybit","С Форекс","J2T"];
+const COLORS = {
+  "А Финам":"#4285f4","С Финам":"#7c3aed",
+  "A Bybit":"#00c896","С Bybit":"#06b6d4",
+  "С Форекс":"#f59e0b","J2T":"#f87171"
+};
+
+let allEntries = [], activeDays = 0;
+const chartInstances = {};
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem('tj_daily_entries2');
+    if (!raw) return [];
+    return JSON.parse(raw).sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+  } catch(e) { return []; }
+}
+
+function filterByPeriod(entries, days) {
+  if (!days) return entries;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  return entries.filter(e => new Date(e.timestamp) >= cutoff);
+}
+
+function fmt(n, dec=0) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return Number(n).toLocaleString('ru-RU', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
+}
+function dcolor(v) { return v > 0 ? '#22c55e' : v < 0 ? '#f87171' : '#4a5a6e'; }
+function dsign(v)  { return v > 0 ? '+' : ''; }
+function hexToRgb(hex) {
+  const h = hex.replace('#','');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+
+function makeChart(canvasId, labels, data, color, height) {
+  destroyChart(canvasId);
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  const [r,g,b] = hexToRgb(color);
+  chartInstances[canvasId] = new Chart(el, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor: color,
+        borderWidth: 2,
+        pointRadius: labels.length < 20 ? 3 : 0,
+        pointHoverRadius: 5,
+        pointBackgroundColor: color,
+        fill: true,
+        backgroundColor: `rgba(${r},${g},${b},0.07)`,
+        tension: 0.35,
+        spanGaps: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {display:false},
+        tooltip: {
+          callbacks: {
+            title: ctx => ctx[0].label,
+            label: ctx => ' ' + fmt(ctx.parsed.y, 2),
+          },
+          backgroundColor:'#0d1c35',
+          borderColor:'#1a2a3a',
+          borderWidth:1,
+          titleColor:'#8892a4',
+          bodyColor:'#e2e8f0',
+          padding:8,
+        }
+      },
+      scales: { x:{display:false}, y:{display:false, grace:'5%'} },
+      interaction: {mode:'index', intersect:false},
+      animation: {duration:350},
+    }
+  });
+}
+
+function render() {
+  const entries = filterByPeriod(allEntries, activeDays);
+
+  const empty = document.getElementById('emptyState');
+  const totalCard = document.getElementById('totalCard');
+  const accGrid = document.getElementById('accGrid');
+  const accTitle = document.getElementById('accTitle');
+  const lastBar = document.getElementById('lastBar');
+
+  // Last entry (always from all entries)
+  const lastE = allEntries.length ? allEntries[allEntries.length-1] : null;
+  if (lastE) {
+    lastBar.style.display = 'flex';
+    document.getElementById('lastDate').textContent =
+      new Date(lastE.timestamp).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'});
+    document.getElementById('lastMood').textContent = lastE.mood || lastE.moodCustom || '—';
+    document.getElementById('lastSleep').textContent = lastE.sleepQuality ? lastE.sleepQuality.split(' ')[0] : '—';
+    document.getElementById('lastActivity').textContent = lastE.activity || '—';
+  }
+
+  if (entries.length < 2) {
+    empty.style.display = 'block';
+    totalCard.style.display = 'none';
+    accGrid.innerHTML = '';
+    accTitle.style.display = 'none';
+    destroyChart('chartTotal');
+    document.getElementById('statEntries').textContent = allEntries.length;
+    document.getElementById('statTotal').textContent = '—';
+    document.getElementById('statDelta').textContent = '—';
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  const labels = entries.map(e => fmtDate(e.timestamp));
+
+  // Per-account arrays
+  const accData = {};
+  ACCOUNTS.forEach(acc => {
+    accData[acc] = entries.map(e => {
+      const v = e.balances?.[acc];
+      return (v !== '' && v !== undefined && v !== null && v !== '0') ? parseFloat(v) : null;
+    });
+  });
+
+  // Total series
+  const totalSeries = entries.map((_, i) => {
+    let sum = 0, any = false;
+    ACCOUNTS.forEach(acc => {
+      const v = accData[acc][i];
+      if (v !== null) { sum += v; any = true; }
+    });
+    return any ? sum : null;
+  });
+
+  // Valid totals for stats
+  const validTotals = totalSeries.filter(v => v !== null);
+  const firstT = validTotals[0] ?? 0;
+  const lastT  = validTotals[validTotals.length-1] ?? 0;
+  const deltaT = lastT - firstT;
+  const pctT   = firstT ? (deltaT / firstT * 100) : 0;
+
+  // Stats
+  document.getElementById('statEntries').textContent = allEntries.length;
+  document.getElementById('statTotal').textContent = fmt(lastT, 0);
+  document.getElementById('statTotalSub').innerHTML = `<span style="color:${dcolor(deltaT)}">${dsign(deltaT)}${fmt(deltaT,0)}</span>`;
+  document.getElementById('statDelta').textContent = dsign(deltaT) + fmt(deltaT, 0);
+  document.getElementById('statDelta').style.color = dcolor(deltaT);
+  document.getElementById('statDeltaPct').innerHTML = `<span style="color:${dcolor(pctT)}">${dsign(pctT)}${pctT.toFixed(1)}%</span>`;
+
+  // Total chart
+  if (validTotals.length >= 2) {
+    totalCard.style.display = 'block';
+    document.getElementById('totalValue').textContent = fmt(lastT, 0);
+    document.getElementById('totalDelta').innerHTML =
+      `<span style="color:${dcolor(deltaT)}">${dsign(deltaT)}${fmt(deltaT,0)}</span>`;
+    document.getElementById('totalAccList').textContent = ACCOUNTS.join(' · ');
+    requestAnimationFrame(() => makeChart('chartTotal', labels, totalSeries, '#00c896'));
+  } else {
+    totalCard.style.display = 'none';
+  }
+
+  // Per-account cards
+  accGrid.innerHTML = '';
+  const activeAccounts = ACCOUNTS.filter(acc => {
+    const d = accData[acc].filter(v => v !== null);
+    return d.length >= 2;
+  });
+
+  if (activeAccounts.length > 0) {
+    accTitle.style.display = 'block';
+    activeAccounts.forEach(acc => {
+      const color = COLORS[acc] || '#60a5fa';
+      const data  = accData[acc];
+      const valid = data.filter(v => v !== null);
+      const first = valid[0] ?? 0;
+      const last2 = valid[valid.length-1] ?? 0;
+      const delta = last2 - first;
+      const canvasId = 'ch_' + acc.replace(/[^a-z0-9]/gi,'_');
+
+      const card = document.createElement('div');
+      card.className = 'acc-card';
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.07em">${acc}</div>
+            <div style="display:flex;align-items:baseline;gap:5px;margin-top:3px">
+              <span style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#e2e8f0">${fmt(last2,0)}</span>
+              <span style="font-size:11px;font-weight:700;color:${dcolor(delta)}">${dsign(delta)}${fmt(delta,0)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="wrap-short"><canvas id="${canvasId}"></canvas></div>
+      `;
+      accGrid.appendChild(card);
+      requestAnimationFrame(() => makeChart(canvasId, labels, data, color));
+    });
+  } else {
+    accTitle.style.display = 'none';
+  }
+}
+
+// Period buttons
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeDays = parseInt(btn.dataset.days);
+    render();
+  });
+});
+
+// Theme
+function updateThemeBtn() {
+  const isLight = document.body.classList.contains('light');
+  // Show icon of the mode you'll switch TO
+  document.getElementById('themeBtn').textContent = isLight ? '🌙' : '☀️';
+}
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  const isLight = document.body.classList.contains('light');
+  localStorage.setItem('tj_theme', isLight ? 'light' : 'dark');
+  updateThemeBtn();
+  render();
+}
+(function(){
+  if(localStorage.getItem('tj_theme')==='light'){
+    document.body.classList.add('light');
+  }
+  updateThemeBtn();
+})();
+
+// Init
+allEntries = loadData();
+render();
+
+// Refresh when returning to tab
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { allEntries = loadData(); render(); }
+});
+</script>
+</body>
+</html>
