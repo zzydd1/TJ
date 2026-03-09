@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#00c896"/>
+  <title>Trading Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    html,body{margin:0;padding:0;background:#060c16;-webkit-text-size-adjust:100%;overflow-x:hidden}
+    *{box-sizing:border-box}
+    input,textarea,button,select{-webkit-tap-highlight-color:transparent;font-family:inherit}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    input[type=number]{-moz-appearance:textfield}
+    ::-webkit-scrollbar{height:4px;width:4px}
+    ::-webkit-scrollbar-track{background:#0a1020}
+    ::-webkit-scrollbar-thumb{background:#1e2d5a;border-radius:3px}
+
+    /* Force full-width on large screens */
+    @media (min-width: 1400px) {
+      #root { width: 100% !important; }
+      #root > div { width: 100% !important; }
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+        /* ── Responsive layout ──────────────────────────────────────── */
+    :root {
+      --fs-base: clamp(13px, 1.5vw, 15px);
+      --touch: clamp(36px, 5vw, 48px);
+    }
+    button { min-height: var(--touch); }
+    .tj-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    @media (min-width: 900px) {
+      .tj-cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    }
+    /* ──────────────────────────────────────────────────────────── */
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    window.storage={
+      get:async(k)=>{try{const v=localStorage.getItem(k);if(v===null)throw new Error('not found');return{key:k,value:v};}catch(e){throw e;}},
+      set:async(k,v)=>{try{localStorage.setItem(k,v);return{key:k,value:v};}catch(e){return null;}},
+      delete:async(k)=>{try{localStorage.removeItem(k);return{key:k,deleted:true};}catch(e){return null;}},
+      list:async(pfx)=>{try{const keys=Object.keys(localStorage).filter(k=>!pfx||k.startsWith(pfx));return{keys};}catch(e){return{keys:[]};}}
+    };
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+const {useState,useEffect,useMemo,useCallback,useRef}=React;
+
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
+const TICKERS = {
+  XAU:  { contractSize:100,    name:"Gold",        pipValue:0.01    },
+  XAG:  { contractSize:5000,   name:"Silver",      pipValue:0.001   },
+  SPY:  { contractSize:1,      name:"S&P 500 ETF", pipValue:0.01    },
+  NASD: { contractSize:1,      name:"NASDAQ",      pipValue:0.01    },
+  GER:  { contractSize:1,      name:"DAX",         pipValue:0.01    },
+  EUR:  { contractSize:100000, name:"EUR/USD",      pipValue:0.00001 },
+  BTC:  { contractSize:1,      name:"Bitcoin",     pipValue:0.01    },
+  ETH:  { contractSize:1,      name:"Ethereum",    pipValue:0.01    },
+  JPY:  { contractSize:100000, name:"USD/JPY",      pipValue:0.001   },
+};
+// Тикеры загружаются из Google Таблицы (лист Tickers). Данные ниже — fallback.
+// Формат строки в таблице: Ticker | ContractSize | PipValue | Name
+const DEFAULT_ACCOUNTS = {
+  "А Финам":390101.23,"С Финам":273361.44,
+  "A Bybit":1593.4,"С Bybit":121.62,"С Форекс":8800.78,"J2T":0,
+};
+const WEEKDAYS     = ["Понедельник","Вторник","Среда","Четверг","Пятница"];
+const WEEKEND      = ["Суббота","Воскресенье"];
+const SESSIONS_BASE= ["Азия","Лондон","США","Россия"];
+const HTF_POI      = ["B2S ↓","FVG ↑","FVG ↓","IFVG","LIQ","S2B ↑","OB ↑","OB ↓","SMT"];
+const LTF_ENTRY    = ["B2S ↓","FVG ↑","FVG ↓","IDM","IFVG","LIQ","MKT","S2B ↑","OB ↑","OB ↓"];
+const STRUCTURE    = ["Тренд","Контртренд","Боковик"];
+const RISK_OPTS    = ["0.5","1","1.5","2"];
+const FEELINGS     = ["Азарт","Жадность","Желание отыграться","Спокойствие","Чешутся руки, хочется торговать"];
+const RESULTS_BASE = ["Тейк","Стоп","Руками"];
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const fmtDT  = (iso) => !iso ? "—" : new Date(iso).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const fmtNum = (n,dec=2) => (n===""||n===null||n===undefined||isNaN(n)) ? "—" : Number(n).toFixed(dec);
+const calcLots=(bal,rp,en,sl,tk,contractSizeManual)=>{
+  const cs=parseFloat(contractSizeManual)||(tk&&TICKERS[tk]?TICKERS[tk].contractSize:0);
+  if(!bal||!rp||!en||!sl||!cs) return "";
+  const d=Math.abs(parseFloat(en)-parseFloat(sl)); if(!d) return "";
+  return Math.round((bal*(parseFloat(rp)/100))/(d*cs)*10000)/10000;
+};
+const calcRR=(en,sl,tg)=>{
+  const e=parseFloat(en),s=parseFloat(sl),t=parseFloat(tg);
+  if(!e||!s||!t) return ""; const r=Math.abs(e-s); if(!r) return "";
+  return Math.round(Math.abs(t-e)/r*100)/100;
+};
+const calcPnL=(en,p1,l1,p2,l2,tk,csManual)=>{
+  const cs=parseFloat(csManual)||(tk&&TICKERS[tk]?TICKERS[tk].contractSize:0);
+  if(!en||!cs) return "";
+  const e=parseFloat(en); let pnl=0;
+  if(p1&&l1) pnl+=(parseFloat(p1)-e)*parseFloat(l1)*cs;
+  if(p2&&l2) pnl+=(parseFloat(p2)-e)*parseFloat(l2)*cs;
+  return Math.round(pnl*100)/100;
+};
+const genLink  = ()=>`https://trading-journal.app/edit/${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`;
+const todayKey = ()=>new Date().toISOString().slice(0,10);
+const curDay   = ()=>["Воскресенье","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота"][new Date().getDay()];
+
+// ─── GOOGLE SHEETS CONFIG ─────────────────────────────────────────────────────
+// Вставьте сюда URL вашего Apps Script после развёртывания:
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMn7UQmz3eZ3tuKy85fA-f78ZY3hKqaTIqaCZpcMv1AgmLvY0WV08IrXXW1GycrHUvCA/exec";
+
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+const loadDeals=async()=>{
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+"?type=trading");
+    const json=await res.json();
+    if(json.status==="ok"&&json.rows&&json.rows.length){
+      return json.rows.map(r=>({
+        timestamp:parseMoscowDate(r["Отметка времени"])||r["Отметка времени"]||"",
+        dayOfWeek:r["День недели"]||"",importantNews:r["Важные новости"]||"",
+        followsPlan:r["Сделка по плану"]||"",followsTS:r["Соответствие ТС"]||"",
+        feelings:(r["Состояние"]||"").split(", ").filter(Boolean),
+        plannedRR:r["Plan RR"]||"",entryTime:r["Open (время входа)"]||"",
+        session:(r["Сессия"]||"").split(", ").filter(Boolean),
+        account:r["Счет"]||"",htfPOI:r["HTF POI"]||"",ltfEntry:r["LTF Entry"]||"",
+        structure:r["Структура"]||"",bos:r["BoS"]||"",ticker:r["Тикер"]||"",
+        sl:r["SL"]||"",entry:r["Entry"]||"",target:r["Target"]||"",
+        risk:r["Риск %"]||"",lotSize:r["Lots"]||"",rr:r["RR"]||"",
+        htfChart:r["HTF Chart"]||"",ltfChart:r["LTF Chart"]||"",
+        closeTime:r["Close (время закрытия)"]||"",result:r["Результат"]||"",
+        closedByPlan:r["Закрыта по плану"]||"",
+        price1:r["Price 1"]||"",lots1:r["Lots 1"]||"",
+        price2:r["Price 2"]||"",lots2:r["Lots 2"]||"",pnl:r["PnL"]||"",
+        htfClose:r["HTF Close Chart"]||"",ltfClose:r["LTF Close Chart"]||"",
+        reason:r["Что привело к решению"]||"",futureBehavior:r["Как буду вести себя"]||"",
+      }));
+    }
+  }catch(e){console.warn("Sheets load failed:",e);}
+  try{const r=await window.storage.get("deals2");return r?JSON.parse(r.value):[];}catch{return[];}
+};
+const saveDeals   =async(d)=>{try{await window.storage.set("deals2",JSON.stringify(d));}catch{}};
+const loadDailyAcc=async()=>{try{const r=await window.storage.get(`daily:${todayKey()}`);return r?JSON.parse(r.value):{};}catch{return{};}};
+const saveDailyAcc=async(d)=>{try{await window.storage.set(`daily:${todayKey()}`,JSON.stringify(d));}catch{}};
+
+// ─── SYNC TO GOOGLE SHEETS ────────────────────────────────────────────────────
+const syncToSheets = async(deal)=>{
+  if(!APPS_SCRIPT_URL||APPS_SCRIPT_URL==="YOUR_APPS_SCRIPT_URL_HERE") return;
+  try{
+    const row=[
+      deal.timestamp,
+      deal.dayOfWeek,
+      deal.importantNews,
+      deal.followsPlan,
+      deal.followsTS,
+      (deal.feelings||[]).join(", "),
+      deal.plannedRR,
+      deal.entryTime,
+      (deal.session||[]).join(", "),
+      deal.account,
+      deal.htfPOI,
+      deal.ltfEntry,
+      deal.structure,
+      deal.bos+(deal.bosTF?" "+deal.bosTF:""),
+      deal.ticker,
+      deal.sl,
+      deal.entry,
+      deal.target,
+      deal.risk,
+      deal.lotSize,
+      deal.rr,
+      deal.htfChart,
+      deal.ltfChart,
+      deal.closeTime,
+      deal.result,
+      deal.closedByPlan,
+      deal.price1,
+      deal.lots1,
+      deal.price2,
+      deal.lots2,
+      deal.pnl,
+      deal.htfClose,
+      deal.ltfClose,
+      deal.reason,
+      deal.futureBehavior,
+    ];
+    await fetch(APPS_SCRIPT_URL,{
+      method:"POST",
+      mode:"no-cors",
+      headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({type:"trading",row}),
+    });
+  }catch(err){console.warn("Sheets sync failed:",err);}
+};
+
+// ─── BLANK ────────────────────────────────────────────────────────────────────
+const blank=()=>({
+  dayOfWeek:curDay(),
+  importantNews:"",importantNewsCustom:"",
+  followsPlan:"",followsPlanCustom:"",
+  followsTS:"",
+  feelings:[],feelingsCustom:"",
+  plannedRR:"",
+  entryTime:"",session:[],sessionCustom:"",
+  account:"",accountManual:"",
+  htfPOI:"",ltfEntry:"",structure:"",
+  ticker:"",tickerCustom:"",contractSizeManual:"",sl:"",entry:"",target:"",
+  risk:"",riskCustom:"",bos:"",bosTF:"",
+  htfChart:"",ltfChart:"",
+  editLink:genLink(),
+  closeTime:"",result:"",resultCustom:"",closedByPlan:"",
+  price1:"",lots1:"",price2:"",lots2:"",
+  htfClose:"",ltfClose:"",
+  reason:"",futureBehavior:"",
+  timestamp:"",
+});
+
+// ─── THEMES ───────────────────────────────────────────────────────────────────
+const DARK={
+  bg:"#060c16",headerBg:"#0a1628",headerBd:"#1a2a3a",
+  cardBg:"rgba(255,255,255,0.025)",cardBd:"#1e2a3a",
+  inputBg:"#141b28",inputBd:"#232c3d",inputColor:"#e2e8f0",inputDis:"#111620",
+  labelColor:"#6b7a8d",textPrim:"#e2e8f0",textSec:"#8892a4",textMuted:"#3a4a5e",
+  accent:"#00c896",accentDim:"rgba(0,200,150,0.12)",accentBd:"#1a3a2e",accentText:"#3a8070",accentDark:"#060c16",
+  pillBd:"#2a3142",pillBg:"rgba(255,255,255,0.03)",
+  divider:"#1a2232",tabBg:"#0a1020",tabBd:"#1a2535",
+  computedBg:"linear-gradient(135deg,rgba(0,200,150,0.07),rgba(0,150,200,0.05))",computedBd:"#1e2d3d",
+  statBg:"#0d1420",statBd:"#1a2535",
+  scrollTrack:"#0a1020",scrollThumb:"#1e3a2e",colorScheme:"dark",
+  badgeTake:{bg:"rgba(0,200,100,0.15)",color:"#22c55e"},
+  badgeStop:{bg:"rgba(240,60,60,0.15)",color:"#f87171"},
+  badgeOther:{bg:"rgba(250,200,50,0.1)",color:"#facc15"},
+  nextBtnBg:"linear-gradient(135deg,#00c896,#008060)",nextBtnColor:"#060c16",
+  backBtnBd:"#1e2a3a",backBtnColor:"#4a5a6e",
+  thBg:"#0d1520",thColor:"#3a8070",trEven:"#0a1018",trOdd:"#0d1420",trBd:"#131d2b",
+};
+const LIGHT={
+  bg:"#f4f7fb",headerBg:"#ffffff",headerBd:"#e2e8f0",
+  cardBg:"#ffffff",cardBd:"#e2e8f0",
+  inputBg:"#ffffff",inputBd:"#d1d9e0",inputColor:"#1e293b",inputDis:"#f1f5f9",
+  labelColor:"#64748b",textPrim:"#1e293b",textSec:"#475569",textMuted:"#94a3b8",
+  accent:"#059669",accentDim:"rgba(5,150,105,0.08)",accentBd:"#a7f3d0",accentText:"#059669",accentDark:"#ffffff",
+  pillBd:"#e2e8f0",pillBg:"#f8fafc",
+  divider:"#e8eef5",tabBg:"#f1f5f9",tabBd:"#e2e8f0",
+  computedBg:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",computedBd:"#a7f3d0",
+  statBg:"#f8fafc",statBd:"#e2e8f0",
+  scrollTrack:"#f1f5f9",scrollThumb:"#94a3b8",colorScheme:"light",
+  badgeTake:{bg:"#dcfce7",color:"#166534"},
+  badgeStop:{bg:"#fee2e2",color:"#991b1b"},
+  badgeOther:{bg:"#fef3c7",color:"#92400e"},
+  nextBtnBg:"linear-gradient(135deg,#059669,#047857)",nextBtnColor:"#ffffff",
+  backBtnBd:"#e2e8f0",backBtnColor:"#64748b",
+  thBg:"#f8fafc",thColor:"#059669",trEven:"#ffffff",trOdd:"#f8fafc",trBd:"#f1f5f9",
+};
+
+// ─── RESPONSIVE HOOK ──────────────────────────────────────────────────────────
+
+  // ── AUTH CHECK ────────────────────────────────────────────────
+  if(typeof sessionStorage!=="undefined"&&sessionStorage.getItem("tj_auth")!=="1"){
+    window.location.href="/TJ/index.html";
+  }
+  const parseMoscowDate=(s)=>{if(!s)return null;const m=s.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);if(!m)return s;return m[3]+"-"+m[2]+"-"+m[1]+"T"+m[4]+":"+m[5]+":00+03:00";};
+
+function useWindowWidth(){
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:800);
+  useEffect(()=>{
+    const h=()=>setW(window.innerWidth);
+    window.addEventListener("resize",h);
+    return()=>window.removeEventListener("resize",h);
+  },[]);
+  return w;
+}
+
+// ─── UI ATOMS ─────────────────────────────────────────────────────────────────
+const Lbl=({children,required,t})=>(
+  <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:t.labelColor,marginBottom:6}}>
+    {children}{required&&<span style={{color:"#f87171",marginLeft:3}}>*</span>}
+  </div>
+);
+
+const Pill=({o,active,onClick,t,mobile})=>(
+  <button onClick={onClick} style={{
+    padding:mobile?"10px 6px":"7px 4px",borderRadius:7,
+    fontSize:mobile?13:12,fontWeight:active?700:500,
+    border:`1.5px solid ${active?t.accent:t.pillBd}`,
+    background:active?t.accentDim:t.pillBg,
+    color:active?t.accent:t.textSec,cursor:"pointer",
+    transition:"all 0.15s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+    minHeight:mobile?44:32,touchAction:"manipulation",
+  }}>{o}</button>
+);
+
+const DayPicker=({value,onChange,t,mobile})=>(
+  mobile ? (
+    // On mobile: 2 rows of days
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+      {[...WEEKDAYS,...WEEKEND].map(d=>(
+        <Pill key={d} o={d.slice(0,3)} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t} mobile/>
+      ))}
+    </div>
+  ) : (
+    <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
+      <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+        {WEEKDAYS.map(d=><Pill key={d} o={d} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t}/>)}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6,minWidth:92}}>
+        {WEEKEND.map(d=><Pill key={d} o={d} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t}/>)}
+      </div>
+    </div>
+  )
+);
+
+const RadioPill=({options,value,onChange,cols=3,t,mobile})=>{
+  const c=mobile?Math.min(2,cols):cols;
+  return(
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${c},1fr)`,gap:mobile?8:6}}>
+      {options.map(o=><Pill key={o} o={o} active={value===o} onClick={()=>onChange(value===o?"":o)} t={t} mobile={mobile}/>)}
+    </div>
+  );
+};
+
+
+const CheckPill=({options,value=[],onChange,t,mobile})=>(
+  <div style={{display:"flex",flexDirection:"column",gap:mobile?8:5}}>
+    {options.map(o=>{
+      const on=value.includes(o);
+      return(
+        <button key={o} onClick={()=>onChange(on?value.filter(x=>x!==o):[...value,o])}
+          style={{padding:mobile?"12px 14px":"8px 12px",borderRadius:7,fontSize:mobile?14:12,fontWeight:on?700:400,
+            border:`1.5px solid ${on?t.accent:t.pillBd}`,background:on?t.accentDim:t.pillBg,
+            color:on?t.accent:t.textSec,cursor:"pointer",textAlign:"left",transition:"all 0.15s",
+            display:"flex",alignItems:"center",gap:10,minHeight:mobile?48:32,touchAction:"manipulation"}}>
+          <div style={{width:mobile?18:14,height:mobile?18:14,borderRadius:4,flexShrink:0,
+            border:`2px solid ${on?t.accent:t.pillBd}`,background:on?t.accent:"transparent",
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {on&&<svg width="9" height="7" viewBox="0 0 9 7"><path d="M1 3.5L3.5 6L8 1" stroke={t.accentDark} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+          </div>
+          {o}
+        </button>
+      );
+    })}
+  </div>
+);
+
+const Inp=({value,onChange,placeholder,type="text",disabled,suffix,t,mobile})=>(
+  <div style={{position:"relative"}}>
+    <input type={type} value={value??""} onChange={e=>onChange(e.target.value)}
+      placeholder={placeholder||""} disabled={disabled}
+      style={{width:"100%",padding:mobile?"12px 14px":"9px 12px",borderRadius:7,
+        fontSize:mobile?16:13,border:`1.5px solid ${t.inputBd}`,
+        background:disabled?t.inputDis:t.inputBg,color:disabled?t.textMuted:t.inputColor,
+        outline:"none",boxSizing:"border-box",fontFamily:"'JetBrains Mono',monospace",
+        paddingRight:suffix?44:undefined,transition:"border-color 0.15s",colorScheme:t.colorScheme}}
+      onFocus={e=>e.target.style.borderColor=t.accent}
+      onBlur={e=>e.target.style.borderColor=t.inputBd}/>
+    {suffix&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:t.textMuted}}>{suffix}</span>}
+  </div>
+);
+
+const TArea=({value,onChange,placeholder,rows=3,t,mobile})=>(
+  <textarea value={value??""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    style={{width:"100%",padding:mobile?"12px 14px":"9px 12px",borderRadius:7,
+      fontSize:mobile?15:13,border:`1.5px solid ${t.inputBd}`,
+      background:t.inputBg,color:t.inputColor,outline:"none",resize:"vertical",
+      boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5}}
+    onFocus={e=>e.target.style.borderColor=t.accent}
+    onBlur={e=>e.target.style.borderColor=t.inputBd}/>
+);
+
+const DTInp=({value,onChange,t,mobile})=>(
+  <input type="datetime-local" value={value??""} onChange={e=>onChange(e.target.value)}
+    style={{width:"100%",padding:mobile?"12px 14px":"9px 12px",borderRadius:7,
+      fontSize:mobile?16:13,border:`1.5px solid ${t.inputBd}`,
+      background:t.inputBg,color:t.inputColor,outline:"none",boxSizing:"border-box",
+      fontFamily:"'JetBrains Mono',monospace",colorScheme:t.colorScheme}}
+    onFocus={e=>e.target.style.borderColor=t.accent}
+    onBlur={e=>e.target.style.borderColor=t.inputBd}/>
+);
+
+const Computed=({label,value,unit,accent,t,mobile})=>(
+  <div style={{borderRadius:8,padding:mobile?"14px 16px":"10px 14px",
+    background:t.computedBg,border:`1.5px solid ${accent?t.accentBd:t.computedBd}`}}>
+    <div style={{fontSize:10,color:t.accentText,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:4}}>{label}</div>
+    <div style={{fontSize:mobile?24:20,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:t.accent}}>
+      {(value!==""&&value!==null&&value!==undefined)?value:"—"}
+      {unit&&<span style={{fontSize:12,color:t.accentText,marginLeft:4}}>{unit}</span>}
+    </div>
+  </div>
+);
+
+const Card=({title,icon,children,t})=>(
+  <div style={{background:t.cardBg,borderRadius:12,border:`1px solid ${t.cardBd}`,padding:"16px 16px 12px",marginBottom:12}}>
+    {title&&<div style={{fontSize:11,fontWeight:700,color:t.accentText,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:14,display:"flex",alignItems:"center",gap:6}}><span>{icon}</span>{title}</div>}
+    {children}
+  </div>
+);
+
+const Hr=({t})=><div style={{height:1,background:t.divider,margin:"12px 0"}}/>;
+
+const F=({label,required,children,t})=>(
+  <div style={{marginBottom:16}}>
+    {label&&<Lbl required={required} t={t}>{label}</Lbl>}
+    {children}
+  </div>
+);
+
+// ─── MOBILE DEAL CARD (replaces table row on mobile) ──────────────────────────
+function DealCard({deal,idx,total,onEdit,onDelete,t}){
+  const [open,setOpen]=useState(false);
+  const rc=deal.result==="Тейк"?t.badgeTake:deal.result==="Стоп"?t.badgeStop:t.badgeOther;
+  return(
+    <div style={{background:t.cardBg,border:`1px solid ${t.cardBd}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+      {/* Summary row */}
+      <div onClick={()=>setOpen(o=>!o)} style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+        <div style={{width:28,height:28,borderRadius:6,background:t.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:t.accent,flexShrink:0}}>{total-idx}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:t.textPrim,display:"flex",alignItems:"center",gap:6}}>
+            <span>{deal.ticker||"—"}</span>
+            {deal.result&&<span style={{fontSize:11,padding:"2px 7px",borderRadius:4,fontWeight:700,background:rc.bg,color:rc.color}}>{deal.result}</span>}
+          </div>
+          <div style={{fontSize:11,color:t.textMuted,marginTop:2}}>{fmtDT(deal.timestamp)}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          {deal.pnl!==""&&deal.pnl!==null&&(
+            <div style={{fontSize:14,fontWeight:800,fontFamily:"monospace",color:parseFloat(deal.pnl)>=0?"#22c55e":"#f87171"}}>{fmtNum(deal.pnl)}</div>
+          )}
+          {deal.rr&&<div style={{fontSize:11,color:t.accent,fontWeight:600}}>{deal.rr}R</div>}
+        </div>
+        <div style={{fontSize:14,color:t.textMuted,marginLeft:4}}>{open?"▲":"▼"}</div>
+      </div>
+      {/* Detail */}
+      {open&&(
+        <div style={{padding:"0 14px 14px",borderTop:`1px solid ${t.divider}`}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+            {[
+              ["SL",deal.sl],["Entry",deal.entry],["Target",deal.target],["Lots",deal.lotSize],
+              ["Риск",deal.risk?deal.risk+"%":""],["Сессия",(deal.session||[]).join(", ")],
+              ["Счет",deal.account],["Структура",deal.structure],
+            ].map(([k,v])=>v?(
+              <div key={k} style={{background:t.tabBg,borderRadius:7,padding:"8px 10px"}}>
+                <div style={{fontSize:10,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{k}</div>
+                <div style={{fontSize:13,fontWeight:600,color:t.textSec,fontFamily:"'JetBrains Mono',monospace",marginTop:2}}>{v}</div>
+              </div>
+            ):null)}
+          </div>
+          {deal.reason&&<div style={{marginTop:10,padding:"10px 12px",borderRadius:7,background:t.tabBg}}>
+            <div style={{fontSize:10,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Решение</div>
+            <div style={{fontSize:13,color:t.textSec,lineHeight:1.5}}>{deal.reason}</div>
+          </div>}
+          <div style={{display:"flex",gap:8,marginTop:12}}>
+            <button onClick={()=>onEdit(idx)} style={{flex:1,padding:"10px",borderRadius:8,background:"transparent",border:`1px solid #3b82f6`,color:"#60a5fa",fontSize:13,fontWeight:600,cursor:"pointer",touchAction:"manipulation"}}>✏️ Изменить</button>
+            <button onClick={()=>onDelete(idx)} style={{flex:1,padding:"10px",borderRadius:8,background:"transparent",border:`1px solid #f87171`,color:"#f87171",fontSize:13,fontWeight:600,cursor:"pointer",touchAction:"manipulation"}}>🗑 Удалить</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DESKTOP TABLE ────────────────────────────────────────────────────────────
+const COLS=[
+  {k:"timestamp",h:"Время",fmt:fmtDT},{k:"dayOfWeek",h:"День"},{k:"importantNews",h:"Новости"},
+  {k:"followsPlan",h:"По плану"},{k:"followsTS",h:"ТС"},{k:"feelings",h:"Состояние",fmt:v=>(v||[]).join(", ")},
+  {k:"plannedRR",h:"Plan RR"},{k:"entryTime",h:"Open",fmt:fmtDT},{k:"session",h:"Сессия",fmt:v=>(v||[]).join(", ")},
+  {k:"account",h:"Счет"},{k:"htfPOI",h:"HTF POI"},{k:"ltfEntry",h:"LTF Entry"},{k:"structure",h:"Структура"},{k:"bos",h:"BoS",fmt:(v,r)=>v?(v+(r?.bosTF?" "+r.bosTF:"")):"—"},
+  {k:"ticker",h:"Тикер"},{k:"sl",h:"SL",mono:1},{k:"entry",h:"Entry",mono:1},{k:"target",h:"Target",mono:1},
+  {k:"risk",h:"Риск",fmt:v=>v?v+"%":"—"},{k:"lotSize",h:"Lots",mono:1},{k:"rr",h:"RR",mono:1,accent:1},
+  {k:"htfChart",h:"HTF",link:1},{k:"ltfChart",h:"LTF",link:1},
+  {k:"closeTime",h:"Close",fmt:fmtDT},{k:"result",h:"Результат",result:1},{k:"closedByPlan",h:"По плану"},
+  {k:"price1",h:"P1",mono:1},{k:"lots1",h:"L1",mono:1},{k:"price2",h:"P2",mono:1},{k:"lots2",h:"L2",mono:1},
+  {k:"pnl",h:"PnL",pnl:1},{k:"reason",h:"Решение"},{k:"futureBehavior",h:"Будущее"},
+];
+
+function DesktopTable({deals,onEdit,onDelete,t}){
+  const sorted=[...deals].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+  const th={padding:"8px 10px",textAlign:"left",color:t.thColor,fontWeight:700,fontSize:10,letterSpacing:"0.07em",textTransform:"uppercase",borderRight:`1px solid ${t.trBd}`,whiteSpace:"nowrap",background:t.thBg};
+  const td={padding:"7px 10px",color:t.textSec,borderRight:`1px solid ${t.trBd}`,verticalAlign:"top",textAlign:"left",fontSize:11};
+  return(
+    <div style={{overflowX:"auto",borderRadius:10,border:`1px solid ${t.cardBd}`}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+        <thead><tr>
+          <th style={{...th,width:32}}>#</th>
+          {COLS.map(c=><th key={c.k} style={th}>{c.h}</th>)}
+          <th style={th}>⚙</th>
+        </tr></thead>
+        <tbody>
+          {sorted.map((d,i)=>(
+            <tr key={i} style={{background:i%2===0?t.trEven:t.trOdd,borderBottom:`1px solid ${t.trBd}`}}>
+              <td style={{...td,color:t.textMuted,textAlign:"center"}}>{sorted.length-i}</td>
+              {COLS.map(c=>{
+                let v=d[c.k]??"";
+                if(c.fmt) v=c.fmt(v);
+                if(v===""||v===null||v===undefined) v="—";
+                if(c.link&&v!=="—") v=<a href={v} target="_blank" rel="noreferrer" style={{color:"#3b82f6",textDecoration:"none"}}>🔗</a>;
+                else if(c.result&&v!=="—"){const rc=v==="Тейк"?t.badgeTake:v==="Стоп"?t.badgeStop:t.badgeOther;v=<span style={{padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700,background:rc.bg,color:rc.color}}>{v}</span>;}
+                else if(c.pnl&&v!=="—"){const n=parseFloat(v);v=<span style={{color:n>0?"#22c55e":n<0?"#f87171":t.textSec,fontWeight:700}}>{fmtNum(n)}</span>;}
+                else if(c.accent) v=<span style={{color:t.accent,fontWeight:700}}>{v}</span>;
+                return <td key={c.k} style={{...td,fontFamily:c.mono?"'JetBrains Mono',monospace":"inherit",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:["reason","futureBehavior"].includes(c.k)?"normal":"nowrap"}}>{v}</td>;
+              })}
+              <td style={{...td,whiteSpace:"nowrap"}}>
+                <button onClick={()=>onEdit(i)} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:`1px solid ${t.backBtnBd}`,color:"#60a5fa",cursor:"pointer",fontSize:10,marginRight:3}}>✏️</button>
+                <button onClick={()=>onDelete(i)} style={{padding:"3px 6px",borderRadius:4,background:"transparent",border:`1px solid ${t.backBtnBd}`,color:"#f87171",cursor:"pointer",fontSize:10}}>🗑</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+function Stats({deals,t,mobile}){
+  const closed=deals.filter(d=>d.result);
+  const wins=closed.filter(d=>d.result==="Тейк").length,total=closed.length;
+  const totalPnL=closed.reduce((s,d)=>s+(parseFloat(d.pnl)||0),0);
+  const wr=total?Math.round(wins/total*100):0;
+  const avgRR=closed.length?(closed.reduce((s,d)=>s+(parseFloat(d.rr)||0),0)/closed.length).toFixed(2):"—";
+  const box=(label,value,color)=>(
+    <div style={{background:t.statBg,borderRadius:9,padding:mobile?"10px 12px":"12px 14px",border:`1px solid ${t.statBd}`,flex:1,minWidth:0}}>
+      <div style={{fontSize:9,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{label}</div>
+      <div style={{fontSize:mobile?18:20,fontWeight:800,color,fontFamily:"'JetBrains Mono',monospace"}}>{value}</div>
+    </div>
+  );
+  return(
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+      {box("Всего",deals.length,"#60a5fa")}
+      {box("Win %",`${wr}%`,wr>=50?"#22c55e":"#f87171")}
+      {box("Avg RR",avgRR,t.accent)}
+      {box("PnL",`${totalPnL>=0?"+":""}${fmtNum(totalPnL)}`,totalPnL>=0?"#22c55e":"#f87171")}
+    </div>
+  );
+}
+
+// ─── DAILY EDITOR (MODAL) ─────────────────────────────────────────────────────
+function DailyEditor({accounts,setAccounts,onClose,t,mobile}){
+  const [local,setLocal]=useState({...accounts});
+  const save=()=>{setAccounts(local);saveDailyAcc(local);onClose();};
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:mobile?0:20}}>
+      <div style={{background:t.cardBg,borderRadius:mobile?"16px 16px 0 0":14,border:`1px solid ${t.cardBd}`,padding:mobile?"20px 20px 32px":"24px",width:"100%",maxWidth:mobile?"100%":440,maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{fontSize:15,fontWeight:800,color:t.textPrim,marginBottom:16}}>📅 Балансы на {todayKey()}</div>
+        {Object.keys(DEFAULT_ACCOUNTS).map(acc=>(
+          <div key={acc} style={{marginBottom:12}}>
+            <Lbl t={t}>{acc}</Lbl>
+            <Inp type="number" value={local[acc]??DEFAULT_ACCOUNTS[acc]} onChange={v=>setLocal(p=>({...p,[acc]:v}))} placeholder={String(DEFAULT_ACCOUNTS[acc])} t={t} mobile={mobile}/>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:10,marginTop:20}}>
+          <button onClick={onClose} style={{flex:1,padding:"12px",borderRadius:9,background:"transparent",border:`1px solid ${t.cardBd}`,color:t.textSec,cursor:"pointer",fontSize:14,touchAction:"manipulation"}}>Отмена</button>
+          <button onClick={save} style={{flex:1,padding:"12px",borderRadius:9,background:t.accent,border:"none",color:t.accentDark,cursor:"pointer",fontSize:14,fontWeight:800,touchAction:"manipulation"}}>Сохранить</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function TradingJournal(){
+  const [isDark,setIsDark]=useState(true);
+  const t=isDark?DARK:LIGHT;
+  const w=useWindowWidth(); const mobile=w<640;
+
+  const [tab,setTab]=useState("pre");
+  const [view,setView]=useState("form");
+  const [deals,setDeals]=useState([]);
+  const [editIdx,setEditIdx]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [showDaily,setShowDaily]=useState(false);
+  const [dailyAcc,setDailyAcc]=useState({});
+  const [form,setForm]=useState(blank());
+
+  useEffect(()=>{
+    (async()=>{
+      const [d,da]=await Promise.all([loadDeals(),loadDailyAcc()]);
+      setDeals(d);setDailyAcc(da);setLoading(false);
+    })();
+  },[]);
+
+  const set=(key)=>(val)=>setForm(p=>({...p,[key]:val}));
+
+  const balance=useMemo(()=>{
+    if(form.accountManual) return parseFloat(form.accountManual);
+    if(!form.account) return 0;
+    return parseFloat(dailyAcc[form.account]??DEFAULT_ACCOUNTS[form.account]??0);
+  },[form.account,form.accountManual,dailyAcc]);
+
+  const effRisk=useMemo(()=>parseFloat(form.riskCustom||form.risk||0),[form.risk,form.riskCustom]);
+  const lotSize=useMemo(()=>calcLots(balance,effRisk,form.entry,form.sl,form.ticker,form.contractSizeManual),[balance,effRisk,form.entry,form.sl,form.ticker,form.contractSizeManual]);
+  const lossUsd=useMemo(()=>{
+    const lots=parseFloat(lotSize);
+    const sl=parseFloat(form.sl),en=parseFloat(form.entry);
+    if(!lots||!sl||!en) return "";
+    const cs=parseFloat(form.contractSizeManual)||(form.ticker&&TICKERS[form.ticker]?TICKERS[form.ticker].contractSize:0);
+    if(!cs) return "";
+    return Math.round(Math.abs(sl-en)*lots*cs*100)/100;
+  },[lotSize,form.sl,form.entry,form.ticker,form.contractSizeManual]);
+  const rr=useMemo(()=>calcRR(form.entry,form.sl,form.target),[form.entry,form.sl,form.target]);
+  const pnl=useMemo(()=>calcPnL(form.entry,form.price1,form.lots1,form.price2,form.lots2,form.ticker,form.contractSizeManual),[form.entry,form.price1,form.lots1,form.price2,form.lots2,form.ticker,form.contractSizeManual]);
+
+  const prog=useMemo(()=>({
+    pre:[form.dayOfWeek,form.importantNews||form.importantNewsCustom,form.followsPlan||form.followsPlanCustom,form.followsTS,form.feelings.length>0||form.feelingsCustom].filter(Boolean).length/5,
+    entry:[form.entryTime,form.account||form.accountManual,form.htfPOI,form.ltfEntry,form.structure,form.ticker,form.sl,form.entry,form.target,effRisk].filter(Boolean).length/10,
+    close:[form.closeTime,form.result||form.resultCustom,form.price1,form.lots1].filter(Boolean).length/4,
+  }),[form,effRisk]);
+
+  const saveDeal=async()=>{
+    const deal={...form,
+      timestamp:editIdx!==null?deals[editIdx].timestamp:new Date().toISOString(),
+      lotSize,rr,pnl,
+      importantNews:form.importantNews||form.importantNewsCustom,
+      ticker:form.ticker==="Другое"?(form.tickerCustom||"Другое"):form.ticker,
+      bos:form.bos,bosTF:form.bosTF,
+      followsPlan:form.followsPlan||form.followsPlanCustom,
+      result:form.result||form.resultCustom,
+      session:[...form.session,...(form.sessionCustom?[form.sessionCustom]:[])],
+      feelings:[...form.feelings,...(form.feelingsCustom?[form.feelingsCustom]:[])],
+    };
+    const updated=editIdx!==null?deals.map((d,i)=>i===editIdx?deal:d):[deal,...deals];
+    setDeals(updated);saveDeals(updated);
+    if(editIdx===null) await syncToSheets(deal); // отправка новой сделки в Google Sheets
+    setForm(blank());setEditIdx(null);setView("table");setTab("pre");
+  };
+
+  const sortedDeals=useMemo(()=>[...deals].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)),[deals]);
+
+  const editDeal=(ti)=>{
+    const deal=sortedDeals[ti];
+    const ri=deals.indexOf(deal);
+    setForm({...blank(),...deal,risk:deal.risk?String(deal.risk):"",riskCustom:""});
+    setEditIdx(ri);setView("form");setTab("pre");
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
+  const deleteDeal=(ti)=>{
+    const deal=sortedDeals[ti];
+    const updated=deals.filter(d=>d!==deal);
+    setDeals(updated);saveDeals(updated);
+  };
+
+  const TABS=[
+    {id:"pre",  label:"Pre",  sub:"Перед",  icon:"◉"},
+    {id:"entry",label:"Entry",sub:"Вход",   icon:"▶"},
+    {id:"close",label:"Close",sub:"Выход",  icon:"■"},
+  ];
+
+  const nBtn={padding:mobile?"14px 20px":"11px 24px",borderRadius:10,background:t.nextBtnBg,border:"none",color:t.nextBtnColor,fontWeight:800,fontSize:mobile?15:13,cursor:"pointer",boxShadow:`0 3px 14px ${t.accent}40`,touchAction:"manipulation",flex:mobile?1:undefined};
+  const bBtn={padding:mobile?"14px 16px":"11px 20px",borderRadius:10,background:"transparent",border:`1px solid ${t.backBtnBd}`,color:t.backBtnColor,fontWeight:600,fontSize:mobile?15:13,cursor:"pointer",touchAction:"manipulation"};
+
+  if(loading) return(
+    <div style={{minHeight:"100vh",background:DARK.bg,display:"flex",alignItems:"center",justifyContent:"center",color:DARK.accent,fontFamily:"monospace",fontSize:14}}>
+      Загрузка...
+    </div>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:t.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif",color:t.textPrim}}>
+      
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+      {showDaily&&<DailyEditor accounts={dailyAcc} setAccounts={setDailyAcc} onClose={()=>setShowDaily(false)} t={t} mobile={mobile}/>}
+
+      {/* HEADER */}
+      <div style={{background:t.headerBg,borderBottom:`1px solid ${t.headerBd}`,padding:`0 ${mobile?14:24}px`,display:"flex",alignItems:"center",justifyContent:"space-between",height:mobile?52:56,position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:mobile?8:12}}>
+          <div style={{width:34,height:34,borderRadius:8,background:`linear-gradient(135deg,${t.accent},#0080c0)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:13,color:"#fff",flexShrink:0}}>TJ</div>
+          <div>
+            <div style={{fontSize:mobile?13:14,fontWeight:800,color:t.textPrim}}>Trading Journal</div>
+            {!mobile&&<div style={{fontSize:10,color:t.accentText,letterSpacing:"0.05em"}}>ДНЕВНИК СДЕЛОК</div>}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:mobile?6:8,alignItems:"center"}}>
+          <a href="/TJ/index.html" style={{width:mobile?38:36,height:mobile?38:36,borderRadius:8,background:"transparent",border:`1px solid ${t.cardBd}`,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",touchAction:"manipulation"}} title="На главную">🏠</a>
+          <button onClick={()=>setIsDark(d=>!d)}
+            style={{width:mobile?38:36,height:mobile?38:36,borderRadius:8,background:"transparent",border:`1px solid ${t.cardBd}`,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"}}>
+            {isDark?"☀️":"🌙"}
+          </button>
+          <a href="https://docs.google.com/forms/d/e/YOUR_DAILY_FORM_ID/viewform" target="_blank" rel="noreferrer"
+            style={{padding:mobile?"8px 10px":"6px 12px",borderRadius:7,background:"transparent",border:`1px solid ${t.accentBd}`,color:t.accentText,textDecoration:"none",fontSize:mobile?13:11,fontWeight:600,display:"flex",alignItems:"center",gap:4,touchAction:"manipulation"}}>
+            📅{!mobile&&" Daily"}
+          </a>
+          <button onClick={()=>setView(view==="table"?"form":"table")}
+            style={{padding:mobile?"8px 12px":"6px 14px",borderRadius:7,fontSize:mobile?13:12,fontWeight:700,cursor:"pointer",
+              background:view==="table"?t.accentDim:"rgba(128,128,128,0.07)",
+              border:`1px solid ${view==="table"?t.accent:t.cardBd}`,
+              color:view==="table"?t.accent:t.textSec,touchAction:"manipulation"}}>
+            {view==="table"?"◀ Форма":`WR${deals.length>0?` (${deals.length})`:""}`}
+          </button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:"100%",margin:"0 auto",padding:`${w<480?12:w<768?16:20}px ${w<480?8:12}px 80px`}}>
+
+        {/* TABLE VIEW */}
+        {view==="table"?(
+          <>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <div style={{fontSize:mobile?15:16,fontWeight:800,color:t.textPrim}}>Журнал сделок</div>
+              <button onClick={()=>{setForm(blank());setEditIdx(null);setView("form");setTab("pre");}}
+                style={{padding:mobile?"10px 14px":"8px 16px",borderRadius:8,background:t.accent,border:"none",color:t.accentDark,fontWeight:800,fontSize:mobile?13:12,cursor:"pointer",touchAction:"manipulation"}}>
+                + Новая сделка
+              </button>
+            </div>
+            <Stats deals={deals} t={t} mobile={mobile}/>
+            {mobile?(
+              sortedDeals.length===0?(
+                <div style={{textAlign:"center",padding:"50px 20px",color:t.textMuted}}>
+                  <div style={{fontSize:40,marginBottom:10}}>📋</div>
+                  <div style={{fontSize:14}}>Нет сделок</div>
+                </div>
+              ):(
+                sortedDeals.map((d,i)=><DealCard key={i} deal={d} idx={i} total={sortedDeals.length} onEdit={editDeal} onDelete={deleteDeal} t={t}/>)
+              )
+            ):(
+              deals.length===0?(
+                <div style={{textAlign:"center",padding:"50px 20px",color:t.textMuted}}>
+                  <div style={{fontSize:40,marginBottom:10}}>📋</div>
+                  <div style={{fontSize:14}}>Нет сделок</div>
+                </div>
+              ):<DesktopTable deals={deals} onEdit={editDeal} onDelete={deleteDeal} t={t}/>
+            )}
+          </>
+        ):(
+          <>
+            {/* TAB NAV */}
+            <div style={{display:"flex",gap:mobile?4:6,marginBottom:mobile?14:18,padding:4,borderRadius:12,background:t.tabBg,border:`1px solid ${t.tabBd}`}}>
+              {TABS.map(tb=>{
+                const active=tab===tb.id,pct=Math.round(prog[tb.id]*100);
+                return(
+                  <button key={tb.id} onClick={()=>setTab(tb.id)}
+                    style={{flex:1,padding:mobile?"10px 4px":"10px 8px",borderRadius:9,cursor:"pointer",
+                      background:active?t.cardBg:"transparent",
+                      border:`1.5px solid ${active?t.accent:"transparent"}`,
+                      transition:"all 0.2s",touchAction:"manipulation"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                      <span style={{fontSize:10,color:active?t.accent:t.textMuted}}>{tb.icon}</span>
+                      <span style={{fontSize:mobile?13:13,fontWeight:700,color:active?t.textPrim:t.textSec}}>{tb.label}</span>
+                    </div>
+                    <div style={{fontSize:10,color:active?t.accentText:t.textMuted,marginTop:1}}>{tb.sub}</div>
+                    <div style={{marginTop:6,height:3,borderRadius:2,background:t.divider,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:pct===100?t.accent:t.accentText,borderRadius:2,transition:"width 0.4s"}}/>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* PRE TAB */}
+            {tab==="pre"&&(
+              <div style={{animation:"fadeIn 0.25s ease"}}>
+                <Card title="Перед сделкой" icon="📅" t={t}>
+                  <F label="День недели" required t={t}>
+                    <DayPicker value={form.dayOfWeek} onChange={set("dayOfWeek")} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Важные новости?" t={t}>
+                    <RadioPill options={["Да","Нет"]} value={form.importantNews} onChange={v=>{set("importantNews")(v);if(v)set("importantNewsCustom")("");}} cols={2} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp value={form.importantNewsCustom} onChange={v=>{set("importantNewsCustom")(v);if(v)set("importantNews")("");}} placeholder="Или введите вручную..." t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                </Card>
+
+                <Card title="Соответствие ТС" icon="📋" t={t}>
+                  <F label="Сделка по плану?" t={t}>
+                    <RadioPill options={["Да","Нет"]} value={form.followsPlan} onChange={v=>{set("followsPlan")(v);if(v)set("followsPlanCustom")("");}} cols={2} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp value={form.followsPlanCustom} onChange={v=>{set("followsPlanCustom")(v);if(v)set("followsPlan")("");}} placeholder="Или введите вручную..." t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Соответствие ТС?" t={t}>
+                    <RadioPill options={["Да","Нет"]} value={form.followsTS} onChange={set("followsTS")} cols={2} t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                <Card title="Состояние" icon="🧠" t={t}>
+                  <F label="Какие чувства я испытываю?" t={t}>
+                    <CheckPill options={FEELINGS} value={form.feelings} onChange={set("feelings")} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp value={form.feelingsCustom} onChange={set("feelingsCustom")} placeholder="Другое состояние..." t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Планируемый RR" t={t}>
+                    <Inp type="number" value={form.plannedRR} onChange={set("plannedRR")} placeholder="Например: 3.5" t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                <div style={{display:"flex",justifyContent:"flex-end"}}>
+                  <button onClick={()=>setTab("entry")} style={nBtn}>Далее → Entry</button>
+                </div>
+              </div>
+            )}
+
+            {/* ENTRY TAB */}
+            {tab==="entry"&&(
+              <div style={{animation:"fadeIn 0.25s ease"}}>
+                <Card title="Entry" icon="⏰" t={t}>
+                  <F label="Open" required t={t}>
+                    <DTInp value={form.entryTime} onChange={set("entryTime")} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Сессия" t={t}>
+                    <RadioPill options={SESSIONS_BASE} value={form.session[0]||""} onChange={v=>set("session")(v?[v]:[])} cols={2} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp value={form.sessionCustom} onChange={set("sessionCustom")} placeholder="Другая сессия..." t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                </Card>
+
+                <Card title="Счет" icon="💼" t={t}>
+                  <F label="Торговый счет" required t={t}>
+                    <RadioPill options={Object.keys(DEFAULT_ACCOUNTS)} value={form.account} onChange={v=>{set("account")(v);set("accountManual")("");}} cols={3} t={t} mobile={mobile}/>
+                  </F>
+                  {form.account&&(
+                    <div style={{padding:"8px 12px",borderRadius:7,background:t.accentDim,border:`1px solid ${t.accentBd}`,marginTop:6,marginBottom:10}}>
+                      <span style={{fontSize:11,color:t.accentText}}>Баланс: </span>
+                      <span style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:700,color:t.accent,fontSize:mobile?15:13}}>
+                        {(dailyAcc[form.account]??DEFAULT_ACCOUNTS[form.account])?.toLocaleString("ru-RU")}
+                      </span>
+                    </div>
+                  )}
+                  <F label="Или введите вручную" t={t}>
+                    <Inp type="number" value={form.accountManual} onChange={v=>{set("accountManual")(v);set("account")("");}} placeholder="Сумма депозита" t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                <Card title="Анализ" icon="🔬" t={t}>
+                  <F label="Структура" required t={t}><RadioPill options={STRUCTURE} value={form.structure} onChange={set("structure")} cols={3} t={t} mobile={mobile}/></F>
+                  <Hr t={t}/>
+                  <F label="HTF POI" required t={t}><RadioPill options={HTF_POI} value={form.htfPOI} onChange={set("htfPOI")} cols={3} t={t} mobile={mobile}/></F>
+                  <Hr t={t}/>
+                  <F label="LTF Entry" required t={t}><RadioPill options={LTF_ENTRY} value={form.ltfEntry} onChange={set("ltfEntry")} cols={mobile?2:5} t={t} mobile={mobile}/></F>
+                  <Hr t={t}/>
+                  <F label="BoS" t={t}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <RadioPill options={["Да","Нет"]} value={form.bos} onChange={set("bos")} cols={2} t={t} mobile={mobile}/>
+                      {form.bos==="Да"&&(
+                        <select value={form.bosTF||""} onChange={e=>set("bosTF")(e.target.value)}
+                          style={{padding:mobile?"11px 12px":"8px 10px",borderRadius:7,fontSize:mobile?15:13,
+                            border:`1.5px solid ${t.inputBd}`,background:t.inputBg,color:t.inputColor,
+                            outline:"none",cursor:"pointer",colorScheme:t.colorScheme,minWidth:80}}>
+                          <option value="">ТФ</option>
+                          {["15M","1H","4H","1D"].map(tf=><option key={tf} value={tf}>{tf}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </F>
+                </Card>
+
+                <Card title="Расчет позиции" icon="📈" t={t}>
+                  <F label="Тикер" required t={t}>
+                    <RadioPill options={[...Object.keys(TICKERS),"Другое"]} value={form.ticker} onChange={v=>{set("ticker")(v);if(v!=="Другое")set("tickerCustom")("");set("contractSizeManual")("");}} cols={mobile?3:5} t={t} mobile={mobile}/>
+                    {form.ticker==="Другое"&&(
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+                        <Inp value={form.tickerCustom} onChange={set("tickerCustom")} placeholder="Название тикера" t={t} mobile={mobile}/>
+                        <Inp type="number" value={form.contractSizeManual} onChange={set("contractSizeManual")} placeholder="Contract Size" t={t} mobile={mobile}/>
+                      </div>
+                    )}
+                  </F>
+                  {form.ticker&&form.ticker!=="Другое"&&(
+                    <div style={{padding:"7px 12px",borderRadius:6,background:t.tabBg,border:`1px solid ${t.tabBd}`,marginBottom:12,fontSize:11,color:t.accentText}}>
+                      {TICKERS[form.ticker].name} · Contract: {TICKERS[form.ticker].contractSize} · Pip: {TICKERS[form.ticker].pipValue}
+                    </div>
+                  )}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                    <F label="SL" required t={t}><Inp type="number" value={form.sl} onChange={set("sl")} placeholder="Стоп" t={t} mobile={mobile}/></F>
+                    <F label="Entry" required t={t}><Inp type="number" value={form.entry} onChange={set("entry")} placeholder="Вход" t={t} mobile={mobile}/></F>
+                    <F label="Target" required t={t}><Inp type="number" value={form.target} onChange={set("target")} placeholder="Цель" t={t} mobile={mobile}/></F>
+                  </div>
+                  <Hr t={t}/>
+                  <F label="Риск (%)" required t={t}>
+                    <RadioPill options={RISK_OPTS} value={form.risk} onChange={v=>{set("risk")(v);set("riskCustom")("");}} cols={4} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp type="number" value={form.riskCustom} onChange={v=>{set("riskCustom")(v);set("risk")("");}} placeholder="Другое значение риска" suffix="%" t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                  <Hr t={t}/>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:10}}>
+                    <Computed label="Lot Size" value={lotSize} accent t={t} mobile={mobile}/>
+                    <Computed label="R:R" value={rr} unit="R" t={t} mobile={mobile}/>
+                    <Computed label="Loss $" value={lossUsd!==""?fmtNum(lossUsd,2):""} t={t} mobile={mobile}/>
+                  </div>
+                </Card>
+
+                <Card title="Графики" icon="📊" t={t}>
+                  <F label="HTF график" t={t}><Inp value={form.htfChart} onChange={set("htfChart")} placeholder="Ссылка на TradingView" t={t} mobile={mobile}/></F>
+                  <F label="LTF график" t={t}><Inp value={form.ltfChart} onChange={set("ltfChart")} placeholder="Ссылка на TradingView" t={t} mobile={mobile}/></F>
+                </Card>
+
+                <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
+                  <button onClick={()=>setTab("pre")} style={bBtn}>← Pre</button>
+                  <button onClick={()=>setTab("close")} style={nBtn}>Close →</button>
+                </div>
+              </div>
+            )}
+
+            {/* CLOSE TAB */}
+            {tab==="close"&&(
+              <div style={{animation:"fadeIn 0.25s ease"}}>
+                <Card title="Closed" icon="⏰" t={t}>
+                  <F label="Время закрытия" required t={t}>
+                    <DTInp value={form.closeTime} onChange={set("closeTime")} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Результат" t={t}>
+                    <RadioPill options={RESULTS_BASE} value={form.result} onChange={v=>{set("result")(v);if(v)set("resultCustom")("");}} cols={3} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp value={form.resultCustom} onChange={v=>{set("resultCustom")(v);if(v)set("result")("");}} placeholder="Другой результат..." t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Закрыта по плану?" t={t}>
+                    <RadioPill options={["Да","Нет"]} value={form.closedByPlan} onChange={set("closedByPlan")} cols={2} t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                <Card title="Выход из позиции" icon="💰" t={t}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <F label="Price 1" t={t}><Inp type="number" value={form.price1} onChange={set("price1")} placeholder="Цена" t={t} mobile={mobile}/></F>
+                    <F label="Lots 1" t={t}><Inp type="number" value={form.lots1} onChange={set("lots1")} placeholder="Лоты" t={t} mobile={mobile}/></F>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:4}}>
+                    <F label="Price 2" t={t}><Inp type="number" value={form.price2} onChange={set("price2")} placeholder="Цена" t={t} mobile={mobile}/></F>
+                    <F label="Lots 2" t={t}><Inp type="number" value={form.lots2} onChange={set("lots2")} placeholder="Лоты" t={t} mobile={mobile}/></F>
+                  </div>
+                  <div style={{marginTop:12}}>
+                    <Computed label="PnL (авто)" value={pnl!==""?fmtNum(pnl):""} unit={form.ticker?TICKERS[form.ticker]?.name:""} accent={pnl>0} t={t} mobile={mobile}/>
+                  </div>
+                </Card>
+
+                <Card title="Графики закрытия" icon="📊" t={t}>
+                  <F label="HTF close" t={t}><Inp value={form.htfClose} onChange={set("htfClose")} placeholder="Ссылка на TradingView" t={t} mobile={mobile}/></F>
+                  <F label="LTF close" t={t}><Inp value={form.ltfClose} onChange={set("ltfClose")} placeholder="Ссылка на TradingView" t={t} mobile={mobile}/></F>
+                </Card>
+
+                <Card title="Рефлексия" icon="📝" t={t}>
+                  <F label="Что привело к такому решению?" t={t}>
+                    <TArea value={form.reason} onChange={set("reason")} placeholder="Опишите свои мысли..." t={t} mobile={mobile}/>
+                  </F>
+                  <F label="Как буду вести себя в будущем?" t={t}>
+                    <TArea value={form.futureBehavior} onChange={set("futureBehavior")} placeholder="Опишите выводы..." t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
+                  <button onClick={()=>setTab("entry")} style={bBtn}>← Entry</button>
+                  <button onClick={saveDeal} style={nBtn}>
+                    {editIdx!==null?"💾 Обновить":"✓ Сохранить"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* BOTTOM NAV BAR on mobile when in form view */}
+      {mobile&&view==="form"&&(
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:t.headerBg,borderTop:`1px solid ${t.headerBd}`,display:"flex",zIndex:100,paddingBottom:"env(safe-area-inset-bottom)"}}>
+          {TABS.map(tb=>{
+            const active=tab===tb.id,pct=Math.round(prog[tb.id]*100);
+            return(
+              <button key={tb.id} onClick={()=>setTab(tb.id)} style={{flex:1,padding:"10px 4px 8px",background:"transparent",border:"none",cursor:"pointer",touchAction:"manipulation"}}>
+                <div style={{fontSize:18,marginBottom:2}}>{tb.icon}</div>
+                <div style={{fontSize:11,fontWeight:active?800:500,color:active?t.accent:t.textMuted}}>{tb.label}</div>
+                <div style={{margin:"4px auto 0",width:28,height:3,borderRadius:2,background:t.divider,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:pct===100?t.accent:t.accentText,borderRadius:2}}/>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <style>{`
+    
+    /* Force full-width on large screens */
+    @media (min-width: 1400px) {
+      #root { width: 100% !important; }
+      #root > div { width: 100% !important; }
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+        input[type=number]{-moz-appearance:textfield}
+        ::-webkit-scrollbar{height:5px;width:5px}
+        ::-webkit-scrollbar-track{background:${t.scrollTrack}}
+        ::-webkit-scrollbar-thumb{background:${t.scrollThumb};border-radius:3px}
+        *{box-sizing:border-box}
+        input,textarea,button{-webkit-tap-highlight-color:transparent}
+      `}</style>
+    </div>
+  );
+}
+
+    const root=ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(TradingJournal));
+  </script>
+</body>
+</html>

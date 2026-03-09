@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#9382fa"/>
+  <title>Backtest Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    html,body{margin:0;padding:0;background:#0c0a16;-webkit-text-size-adjust:100%;overflow-x:hidden}
+    *{box-sizing:border-box}
+    input,textarea,button,select{-webkit-tap-highlight-color:transparent;font-family:inherit}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    input[type=number]{-moz-appearance:textfield}
+    ::-webkit-scrollbar{height:4px;width:4px}
+    ::-webkit-scrollbar-track{background:#100d1c}
+    ::-webkit-scrollbar-thumb{background:#3d2e6a;border-radius:3px}
+
+    /* Force full-width on large screens */
+    @media (min-width: 1400px) {
+      #root { width: 100% !important; }
+      #root > div { width: 100% !important; }
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+        /* ── Responsive layout ──────────────────────────────────────── */
+    :root {
+      --fs-base: clamp(13px, 1.5vw, 15px);
+      --touch: clamp(36px, 5vw, 48px);
+    }
+    button { min-height: var(--touch); }
+    .tj-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    @media (min-width: 900px) {
+      .tj-cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    }
+    /* ──────────────────────────────────────────────────────────── */
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    window.storage={
+      get:async(k)=>{try{const v=localStorage.getItem(k);if(v===null)throw new Error('not found');return{key:k,value:v};}catch(e){throw e;}},
+      set:async(k,v)=>{try{localStorage.setItem(k,v);return{key:k,value:v};}catch(e){return null;}},
+      delete:async(k)=>{try{localStorage.removeItem(k);return{key:k,deleted:true};}catch(e){return null;}},
+      list:async(pfx)=>{try{const keys=Object.keys(localStorage).filter(k=>!pfx||k.startsWith(pfx));return{keys};}catch(e){return{keys:[]};}}
+    };
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+const {useState,useEffect,useMemo,useCallback,useRef}=React;
+
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
+const TICKERS     = ["XAU","XAG","SPY","NASD","GER","EUR","BTC","ETH","JPY"];
+const WEEKDAYS    = ["Понедельник","Вторник","Среда","Четверг","Пятница"];
+const WEEKEND     = ["Суббота","Воскресенье"];
+const SESSIONS    = ["Азия","Лондон","США","Россия"];
+const HTF_POI     = ["B2S ↓","FVG ↑","FVG ↓","IFVG","LIQ","S2B ↑","OB ↑","OB ↓","SMT"];
+const LTF_ENTRY   = ["B2S ↓","FVG ↑","FVG ↓","IDM","IFVG","LIQ","MKT","S2B ↑","OB ↑","OB ↓"];
+const STRUCTURE   = ["Тренд","Контртренд","Боковик"];
+const RESULTS     = ["Тейк","Стоп","Руками"];
+const BOS_TF      = ["15M","1H","4H","1D"];
+
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMn7UQmz3eZ3tuKy85fA-f78ZY3hKqaTIqaCZpcMv1AgmLvY0WV08IrXXW1GycrHUvCA/exec"; // Вставьте URL задеплоенного Apps Script
+const SHEETS_URL = "https://docs.google.com/spreadsheets/d/1lfFzdORhOzPr9Zbk1rEzMWk8XUhZ4p0bhhterZISC5E/edit";
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const fmtDT = (iso) => !iso ? "—" : new Date(iso).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const calcRR = (en,sl,tg) => {
+  const e=parseFloat(en),s=parseFloat(sl),t=parseFloat(tg);
+  if(!e||!s||!t) return "";
+  const r=Math.abs(e-s); if(!r) return "";
+  return Math.round(Math.abs(t-e)/r*100)/100;
+};
+const curDay = () => ["Воскресенье","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота"][new Date().getDay()];
+
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+const parseMoscowDate=(s)=>{if(!s)return null;const m=s.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);if(!m)return s;return m[3]+"-"+m[2]+"-"+m[1]+"T"+m[4]+":"+m[5]+":00+03:00";};
+const loadBTs=async()=>{
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+"?type=backtest");
+    const json=await res.json();
+    if(json.status==="ok"&&json.rows&&json.rows.length){
+      return json.rows.map(r=>({
+        timestamp:parseMoscowDate(r["Отметка времени"])||r["Отметка времени"]||"",
+        followsTS:r["Соответствует ТС"]||"",dayOfWeek:r["День недели"]||"",
+        entryTime:r["Время входа"]||"",
+        session:(r["Сессия"]||"").split(", ").filter(Boolean),
+        structure:r["Структура"]||"",htfPOI:r["HTF POI"]||"",ltfEntry:r["LTF Entry"]||"",
+        ticker:r["Тикер"]||"",bos:r["BoS"]||"",bosTF:r["BoS TF"]||"",
+        sl:r["SL"]||"",entry:r["Entry"]||"",target:r["Target"]||"",rr:r["RR"]||"",
+        htfChart:r["HTF Chart"]||"",ltfChart:r["LTF Chart"]||"",
+        closeTime:r["Время закрытия"]||"",result:r["Результат"]||"",
+        closed:r["Closed"]||"",pnl:r["PnL"]||"",
+        htfClose:r["HTF Close Chart"]||"",ltfClose:r["LTF Close Chart"]||"",
+        reason:r["Что привело к решению"]||"",howShouldHaveActed:r["Как надо было действовать"]||"",
+      }));
+    }
+  }catch(e){console.warn("Sheets load failed:",e);}
+  try{const r=await window.storage.get("backtests1");return r?JSON.parse(r.value):[];}catch{return[];}
+};
+const saveBTs = async (d) => { try { await window.storage.set("backtests1",JSON.stringify(d)); } catch {} };
+
+// ─── SYNC ─────────────────────────────────────────────────────────────────────
+const syncToSheets = async (bt) => {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL==="YOUR_APPS_SCRIPT_URL_HERE") return;
+  try {
+    const row = [
+      bt.timestamp,
+      bt.followsTS,
+      bt.dayOfWeek,
+      bt.entryTime,
+      bt.session||(bt.sessionCustom||""),
+      bt.structure,
+      bt.htfPOI,
+      bt.ltfEntry,
+      bt.ticker==="Другое"?(bt.tickerCustom||"Другое"):bt.ticker,
+      bt.bos,
+      bt.bosTF,
+      bt.sl,
+      bt.entry,
+      bt.target,
+      bt.rr,
+      bt.htfChart,
+      bt.ltfChart,
+      bt.closeTime,
+      bt.result||(bt.resultCustom||""),
+      bt.closed,
+      bt.pnl,
+      bt.htfClose,
+      bt.ltfClose,
+      bt.reason,
+      bt.howToAct,
+    ];
+    await fetch(APPS_SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},body:JSON.stringify({type:"backtest",row})});
+  } catch(e) { console.warn("Sheets sync failed:",e); }
+};
+
+// ─── BLANK ────────────────────────────────────────────────────────────────────
+const blank = () => ({
+  followsTS:"",
+  dayOfWeek:curDay(),
+  entryTime:"",
+  session:"",sessionCustom:"",
+  structure:"",
+  htfPOI:"",
+  ltfEntry:"",
+  ticker:"",tickerCustom:"",
+  bos:"",bosTF:"",
+  sl:"",entry:"",target:"",
+  htfChart:"",ltfChart:"",
+  closeTime:"",
+  result:"",resultCustom:"",
+  closed:"",
+  pnl:"",
+  htfClose:"",ltfClose:"",
+  reason:"",howToAct:"",
+  timestamp:"",
+});
+
+// ─── THEMES ───────────────────────────────────────────────────────────────────
+const DARK = {
+  bg:"#0c0a16", headerBg:"#130f22", headerBd:"#2a1f3d",
+  cardBg:"rgba(255,255,255,0.025)", cardBd:"#2a1f3d",
+  inputBg:"#1a1428", inputBd:"#2e2044", inputColor:"#e2e8f0", inputDis:"#110e1d",
+  labelColor:"#7a6a9e", textPrim:"#e2e8f0", textSec:"#9e90b8", textMuted:"#3d3058",
+  accent:"#9382fa", accentDim:"rgba(147,130,250,0.14)", accentBd:"#3d2e6a",
+  accentText:"#9382fa", accentDark:"#0c0a16",
+  pillBd:"#2e2044", pillBg:"rgba(255,255,255,0.03)",
+  divider:"#1e1630", tabBg:"#100d1c", tabBd:"#2a1f3d",
+  computedBg:"linear-gradient(135deg,rgba(147,130,250,0.08),rgba(100,80,220,0.05))",
+  computedBd:"#2e2044",
+  statBg:"#130f22", statBd:"#2a1f3d",
+  scrollTrack:"#100d1c", scrollThumb:"#3d2e6a", colorScheme:"dark",
+  badgeTake:{bg:"rgba(0,200,100,0.15)",color:"#22c55e"},
+  badgeStop:{bg:"rgba(240,60,60,0.15)",color:"#f87171"},
+  badgeOther:{bg:"rgba(250,200,50,0.1)",color:"#facc15"},
+  nextBtnBg:"linear-gradient(135deg,#9382fa,#6d5ce8)",
+  nextBtnColor:"#ffffff",
+  backBtnBd:"#2a1f3d", backBtnColor:"#5a4a7e",
+  thBg:"#130f22", thColor:"#9382fa",
+  trEven:"#0c0a16", trOdd:"#100d1c", trBd:"#1a1428",
+};
+const LIGHT = {
+  bg:"#f5f3ff", headerBg:"#ffffff", headerBd:"#e4e0ff",
+  cardBg:"#ffffff", cardBd:"#e4e0ff",
+  inputBg:"#ffffff", inputBd:"#d4d0ee", inputColor:"#1e1b3a", inputDis:"#f3f1ff",
+  labelColor:"#6d60a0", textPrim:"#1e1b3a", textSec:"#4a4070", textMuted:"#9d90c8",
+  accent:"#7c6ef0", accentDim:"rgba(124,110,240,0.09)", accentBd:"#c4bcf8",
+  accentText:"#7c6ef0", accentDark:"#ffffff",
+  pillBd:"#e4e0ff", pillBg:"#f8f6ff",
+  divider:"#ece9ff", tabBg:"#f3f0ff", tabBd:"#e4e0ff",
+  computedBg:"linear-gradient(135deg,#ede9ff,#f0ecff)",
+  computedBd:"#c4bcf8",
+  statBg:"#f8f6ff", statBd:"#e4e0ff",
+  scrollTrack:"#f3f0ff", scrollThumb:"#c4bcf8", colorScheme:"light",
+  badgeTake:{bg:"#dcfce7",color:"#166534"},
+  badgeStop:{bg:"#fee2e2",color:"#991b1b"},
+  badgeOther:{bg:"#fef3c7",color:"#92400e"},
+  nextBtnBg:"linear-gradient(135deg,#7c6ef0,#5b4bd0)",
+  nextBtnColor:"#ffffff",
+  backBtnBd:"#e4e0ff", backBtnColor:"#7068a0",
+  thBg:"#f8f6ff", thColor:"#7c6ef0",
+  trEven:"#ffffff", trOdd:"#f8f6ff", trBd:"#f0ecff",
+};
+
+// ─── HOOK ─────────────────────────────────────────────────────────────────────
+function useWindowWidth(){
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:800);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+  return w;
+}
+
+// ─── UI ATOMS ─────────────────────────────────────────────────────────────────
+const Lbl=({children,required,t})=>(
+  <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:t.labelColor,marginBottom:6}}>
+    {children}{required&&<span style={{color:"#f87171",marginLeft:3}}>*</span>}
+  </div>
+);
+
+const F=({label,required,t,children})=>(
+  <div style={{marginBottom:14}}>
+    {label&&<Lbl required={required} t={t}>{label}</Lbl>}
+    {children}
+  </div>
+);
+
+const Hr=({t})=><div style={{height:1,background:t.divider,margin:"14px 0"}}/>;
+
+const Card=({title,icon,t,children})=>(
+  <div style={{borderRadius:14,padding:"16px 16px 12px",marginBottom:12,
+    background:t.cardBg,border:`1px solid ${t.cardBd}`,backdropFilter:"blur(8px)"}}>
+    {title&&(
+      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+        <span style={{fontSize:14}}>{icon}</span>
+        <span style={{fontSize:13,fontWeight:800,color:t.textPrim,letterSpacing:"-0.01em"}}>{title}</span>
+      </div>
+    )}
+    {children}
+  </div>
+);
+
+const Pill=({o,active,onClick,t,mobile})=>(
+  <button onClick={onClick} style={{
+    padding:mobile?"10px 6px":"7px 4px",borderRadius:7,
+    fontSize:mobile?13:12,fontWeight:active?700:500,
+    border:`1.5px solid ${active?t.accent:t.pillBd}`,
+    background:active?t.accentDim:t.pillBg,
+    color:active?t.accent:t.textSec,cursor:"pointer",
+    transition:"all 0.15s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+    minHeight:mobile?44:32,touchAction:"manipulation",
+  }}>{o}</button>
+);
+
+const RadioPill=({options,value,onChange,cols=3,t,mobile})=>{
+  const c=mobile?Math.min(2,cols):cols;
+  return(
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${c},1fr)`,gap:mobile?8:6}}>
+      {options.map(o=><Pill key={o} o={o} active={value===o} onClick={()=>onChange(value===o?"":o)} t={t} mobile={mobile}/>)}
+    </div>
+  );
+};
+
+const DayPicker=({value,onChange,t,mobile})=>(
+  mobile?(
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+      {[...WEEKDAYS,...WEEKEND].map(d=>(
+        <Pill key={d} o={d.slice(0,3)} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t} mobile/>
+      ))}
+    </div>
+  ):(
+    <div style={{display:"flex",gap:6}}>
+      <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+        {WEEKDAYS.map(d=><Pill key={d} o={d} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t}/>)}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6,minWidth:92}}>
+        {WEEKEND.map(d=><Pill key={d} o={d} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t}/>)}
+      </div>
+    </div>
+  )
+);
+
+const Inp=({value,onChange,placeholder,type="text",disabled,suffix,t,mobile})=>(
+  <div style={{position:"relative"}}>
+    <input type={type} value={value??""} onChange={e=>onChange(e.target.value)}
+      placeholder={placeholder||""} disabled={disabled}
+      style={{width:"100%",padding:mobile?"12px 14px":"9px 12px",borderRadius:7,
+        fontSize:mobile?16:13,border:`1.5px solid ${t.inputBd}`,
+        background:disabled?t.inputDis:t.inputBg,color:disabled?t.textMuted:t.inputColor,
+        outline:"none",boxSizing:"border-box",fontFamily:"'JetBrains Mono',monospace",
+        paddingRight:suffix?44:undefined,transition:"border-color 0.15s",colorScheme:t.colorScheme}}
+      onFocus={e=>e.target.style.borderColor=t.accent}
+      onBlur={e=>e.target.style.borderColor=t.inputBd}/>
+    {suffix&&<span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:t.textMuted}}>{suffix}</span>}
+  </div>
+);
+
+const TArea=({value,onChange,placeholder,rows=3,t,mobile})=>(
+  <textarea value={value??""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    style={{width:"100%",padding:mobile?"12px 14px":"9px 12px",borderRadius:7,
+      fontSize:mobile?15:13,border:`1.5px solid ${t.inputBd}`,
+      background:t.inputBg,color:t.inputColor,outline:"none",resize:"vertical",
+      boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif",lineHeight:1.5,
+      transition:"border-color 0.15s",colorScheme:t.colorScheme}}
+    onFocus={e=>e.target.style.borderColor=t.accent}
+    onBlur={e=>e.target.style.borderColor=t.inputBd}/>
+);
+
+const DTInp=({value,onChange,t,mobile})=>(
+  <input type="datetime-local" value={value??""} onChange={e=>onChange(e.target.value)}
+    style={{width:"100%",padding:mobile?"12px 14px":"9px 12px",borderRadius:7,
+      fontSize:mobile?16:13,border:`1.5px solid ${t.inputBd}`,
+      background:t.inputBg,color:t.inputColor,outline:"none",boxSizing:"border-box",
+      fontFamily:"'JetBrains Mono',monospace",colorScheme:t.colorScheme,transition:"border-color 0.15s"}}
+    onFocus={e=>e.target.style.borderColor=t.accent}
+    onBlur={e=>e.target.style.borderColor=t.inputBd}/>
+);
+
+const Computed=({label,value,unit,accent,t,mobile})=>(
+  <div style={{borderRadius:9,padding:"10px 14px",background:t.computedBg,border:`1px solid ${t.computedBd}`}}>
+    <div style={{fontSize:9,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:t.accentText,marginBottom:4}}>{label}</div>
+    <div style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:800,fontSize:mobile?18:16,color:accent?t.accent:t.textPrim}}>
+      {value||"—"}{unit&&value?<span style={{fontSize:11,fontWeight:600,color:t.textMuted,marginLeft:4}}>{unit}</span>:null}
+    </div>
+  </div>
+);
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+const Stats=({bts,t})=>{
+  const total=bts.length;
+  if(!total) return null;
+  const wins=bts.filter(b=>b.result==="Тейк").length;
+  const losses=bts.filter(b=>b.result==="Стоп").length;
+  const wr=total?Math.round(wins/total*100):0;
+  const avgRR=bts.filter(b=>b.rr).reduce((s,b)=>s+parseFloat(b.rr),0)/(bts.filter(b=>b.rr).length||1);
+  return(
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+      {[
+        {label:"Бэктестов",value:total,color:t.accent},
+        {label:"Win Rate",value:`${wr}%`,color:"#22c55e"},
+        {label:"Тейков",value:wins,color:"#22c55e"},
+        {label:"Avg RR",value:isNaN(avgRR)?"—":avgRR.toFixed(2),color:t.accent},
+      ].map(s=>(
+        <div key={s.label} style={{background:t.statBg,border:`1px solid ${t.statBd}`,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{fontSize:9,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{s.label}</div>
+          <div style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:800,fontSize:16,color:s.color}}>{s.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── MOBILE CARD ──────────────────────────────────────────────────────────────
+const BTCard=({bt,idx,total,onEdit,onDelete,t})=>{
+  const [open,setOpen]=useState(false);
+  const res=bt.result;
+  const badge=res==="Тейк"?t.badgeTake:res==="Стоп"?t.badgeStop:t.badgeOther;
+  return(
+    <div style={{borderRadius:12,border:`1px solid ${t.cardBd}`,background:t.cardBg,marginBottom:10,overflow:"hidden"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:res==="Тейк"?"#22c55e":res==="Стоп"?"#f87171":"#facc15",flexShrink:0}}/>
+          <div>
+            <div style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:700,fontSize:13,color:t.textPrim}}>
+              {bt.ticker||"—"} · {bt.structure||"—"}
+            </div>
+            <div style={{fontSize:11,color:t.textMuted,marginTop:2}}>{fmtDT(bt.entryTime)||fmtDT(bt.timestamp)}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {res&&<span style={{fontSize:11,fontWeight:700,padding:"3px 8px",borderRadius:5,...badge}}>{res}</span>}
+          {bt.rr&&<span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12,fontWeight:700,color:t.accent}}>{bt.rr}R</span>}
+          <span style={{color:t.textMuted,fontSize:14}}>{open?"▲":"▼"}</span>
+        </div>
+      </div>
+      {open&&(
+        <div style={{padding:"0 14px 14px",borderTop:`1px solid ${t.divider}`}}>
+          {[
+            ["HTF POI",bt.htfPOI],["LTF Entry",bt.ltfEntry],
+            ["День",bt.dayOfWeek],["Сессия",bt.session],
+            ["BoS",bt.bos+(bt.bosTF?" "+bt.bosTF:"")],
+            ["SL",bt.sl],["Entry",bt.entry],["Target",bt.target],["RR",bt.rr],
+            ["Результат",bt.result||bt.resultCustom],["PnL",bt.pnl],
+          ].map(([k,v])=>v?(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${t.divider}`}}>
+              <span style={{fontSize:11,color:t.textMuted}}>{k}</span>
+              <span style={{fontSize:12,fontWeight:600,color:t.textSec,fontFamily:"'JetBrains Mono',monospace"}}>{v}</span>
+            </div>
+          ):null)}
+          {bt.reason&&(
+            <div style={{marginTop:10,padding:"8px 10px",borderRadius:7,background:t.tabBg,fontSize:12,color:t.textSec}}>
+              <span style={{color:t.textMuted,fontSize:10}}>Решение: </span>{bt.reason}
+            </div>
+          )}
+          {bt.howToAct&&(
+            <div style={{marginTop:6,padding:"8px 10px",borderRadius:7,background:t.tabBg,fontSize:12,color:t.textSec}}>
+              <span style={{color:t.textMuted,fontSize:10}}>Как надо: </span>{bt.howToAct}
+            </div>
+          )}
+          <div style={{display:"flex",gap:8,marginTop:12}}>
+            <button onClick={()=>onEdit(idx)} style={{flex:1,padding:"10px",borderRadius:8,border:`1.5px solid ${t.accentBd}`,background:t.accentDim,color:t.accent,fontWeight:700,fontSize:13,cursor:"pointer",touchAction:"manipulation"}}>✏️ Изменить</button>
+            <button onClick={()=>onDelete(idx)} style={{padding:"10px 14px",borderRadius:8,border:"1.5px solid rgba(248,113,113,0.3)",background:"rgba(248,113,113,0.08)",color:"#f87171",fontWeight:700,fontSize:13,cursor:"pointer",touchAction:"manipulation"}}>🗑</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── DESKTOP TABLE ─────────────────────────────────────────────────────────────
+const COLS=[
+  {k:"timestamp",h:"Время",fmt:fmtDT},
+  {k:"followsTS",h:"ТС"},
+  {k:"dayOfWeek",h:"День"},
+  {k:"entryTime",h:"Вход",fmt:fmtDT},
+  {k:"session",h:"Сессия"},
+  {k:"structure",h:"Структура"},
+  {k:"htfPOI",h:"HTF POI"},
+  {k:"ltfEntry",h:"LTF Entry"},
+  {k:"ticker",h:"Тикер"},
+  {k:"bos",h:"BoS",fmt:(v,r)=>v?(v+(r?.bosTF?" "+r.bosTF:"")):"—"},
+  {k:"sl",h:"SL"},{k:"entry",h:"Entry"},{k:"target",h:"Target"},
+  {k:"rr",h:"RR"},
+  {k:"htfChart",h:"HTF Chart",fmt:v=>v?<a href={v} target="_blank" rel="noreferrer" style={{color:"inherit",fontSize:10}}>🔗</a>:"—"},
+  {k:"ltfChart",h:"LTF Chart",fmt:v=>v?<a href={v} target="_blank" rel="noreferrer" style={{color:"inherit",fontSize:10}}>🔗</a>:"—"},
+  {k:"closeTime",h:"Закрытие",fmt:fmtDT},
+  {k:"result",h:"Результат"},
+  {k:"closed",h:"Closed"},
+  {k:"pnl",h:"PnL"},
+  {k:"htfClose",h:"HTF Close",fmt:v=>v?<a href={v} target="_blank" rel="noreferrer" style={{color:"inherit",fontSize:10}}>🔗</a>:"—"},
+  {k:"ltfClose",h:"LTF Close",fmt:v=>v?<a href={v} target="_blank" rel="noreferrer" style={{color:"inherit",fontSize:10}}>🔗</a>:"—"},
+  {k:"reason",h:"Решение"},
+  {k:"howToAct",h:"Как надо"},
+];
+
+const DesktopTable=({bts,onEdit,onDelete,t})=>{
+  const sorted=[...bts].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+  return(
+    <div style={{overflowX:"auto",borderRadius:12,border:`1px solid ${t.cardBd}`}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+        <thead>
+          <tr style={{background:t.thBg}}>
+            {COLS.map(c=><th key={c.k} style={{padding:"8px 10px",textAlign:"left",fontWeight:700,color:t.thColor,whiteSpace:"nowrap",letterSpacing:"0.06em",fontSize:10,borderBottom:`1px solid ${t.cardBd}`,overflow:"hidden"}}>{c.h}</th>)}
+            <th style={{padding:"8px 10px",color:t.thColor,borderBottom:`1px solid ${t.cardBd}`}}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((bt,i)=>{
+            const res=bt.result;
+            const badge=res==="Тейк"?t.badgeTake:res==="Стоп"?t.badgeStop:t.badgeOther;
+            return(
+              <tr key={i} style={{background:i%2===0?t.trEven:t.trOdd,borderBottom:`1px solid ${t.trBd}`}}>
+                {COLS.map(c=>(
+                  <td key={c.k} style={{padding:"7px 10px",textAlign:"left",verticalAlign:"top",color:c.k==="rr"?t.accent:t.textSec,fontFamily:"'JetBrains Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:["reason","howToAct"].includes(c.k)?"normal":"nowrap"}}>
+                    {c.k==="result"&&res?(
+                      <span style={{padding:"2px 7px",borderRadius:4,fontSize:10,fontWeight:700,...badge}}>{res}</span>
+                    ):c.fmt?c.fmt(bt[c.k],bt):(bt[c.k]||"—")}
+                  </td>
+                ))}
+                <td style={{padding:"6px 10px",whiteSpace:"nowrap"}}>
+                  <button onClick={()=>onEdit(i)} style={{padding:"4px 8px",borderRadius:5,border:`1px solid ${t.accentBd}`,background:t.accentDim,color:t.accent,fontSize:11,cursor:"pointer",marginRight:4}}>✏️</button>
+                  <button onClick={()=>onDelete(i)} style={{padding:"4px 8px",borderRadius:5,border:"1px solid rgba(248,113,113,0.3)",background:"rgba(248,113,113,0.08)",color:"#f87171",fontSize:11,cursor:"pointer"}}>🗑</button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+const TABS=[
+  {id:"pre", label:"Pre",  sub:"Перед сделкой",  icon:"◉"},
+  {id:"past",label:"Past", sub:"Закрытие",       icon:"✕"},
+];
+
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
+function BacktestJournal(){
+  const w=useWindowWidth();
+  const mobile=w<640;
+  const [isDark,setIsDark]=useState(true);
+  const t=isDark?DARK:LIGHT;
+
+  const [tab,setTab]=useState("pre");
+  const [view,setView]=useState("form");
+  const [bts,setBts]=useState([]);
+  const [editIdx,setEditIdx]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [form,setForm]=useState(blank());
+
+  const set=k=>v=>setForm(f=>({...f,[k]:v}));
+
+  // Load
+  useEffect(()=>{
+    loadBTs().then(d=>{setBts(d);setLoading(false);});
+    const saved=localStorage.getItem("bt_theme");
+    if(saved==="light") setIsDark(false);
+  },[]);
+
+  const rr=useMemo(()=>calcRR(form.entry,form.sl,form.target),[form.entry,form.sl,form.target]);
+
+  // Progress
+  const prog=useMemo(()=>{
+    const pre=[form.followsTS,form.dayOfWeek,form.entryTime,form.session||form.sessionCustom,
+      form.structure,form.htfPOI,form.ltfEntry,form.ticker||form.tickerCustom,
+      form.sl,form.entry,form.target].filter(Boolean).length/11;
+    const past=[form.closeTime,form.result||form.resultCustom].filter(Boolean).length/2;
+    return{pre,past};
+  },[form]);
+
+  const sortedBTs=useMemo(()=>[...bts].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)),[bts]);
+
+  const [syncStatus,setSyncStatus]=useState(null); // null | "syncing" | "ok" | "err"
+
+  const saveBT=async()=>{
+    const bt={...form, rr:String(rr), timestamp:editIdx!==null?bts[editIdx].timestamp:new Date().toISOString()};
+    let updated;
+    if(editIdx!==null){
+      updated=[...bts]; updated[editIdx]={...updated[editIdx],...bt,timestamp:bts[editIdx].timestamp};
+    } else {
+      updated=[bt,...bts];
+      // Sync to Sheets
+      if(APPS_SCRIPT_URL&&APPS_SCRIPT_URL!=="YOUR_APPS_SCRIPT_URL_HERE"){
+        setSyncStatus("syncing");
+        syncToSheets(bt).then(()=>setSyncStatus("ok")).catch(()=>setSyncStatus("err"));
+      }
+    }
+    setBts(updated);
+    await saveBTs(updated);
+    setForm(blank());
+    setEditIdx(null);
+    setView("table");
+    setTab("pre");
+  };
+
+  const editBT=(i)=>{
+    const b=bts[i];
+    setForm({...blank(),...b});
+    setEditIdx(i);
+    setView("form");
+    setTab("pre");
+  };
+
+  const deleteBT=async(i)=>{
+    if(!window.confirm("Удалить этот бэктест?")) return;
+    const updated=bts.filter((_,idx)=>idx!==i);
+    setBts(updated);
+    await saveBTs(updated);
+  };
+
+  if(loading) return(
+    <div style={{minHeight:"100vh",background:t.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:t.accent,fontFamily:"'JetBrains Mono',monospace",fontSize:14}}>Загрузка...</div>
+    </div>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:t.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+      {/* HEADER */}
+      <div style={{background:t.headerBg,borderBottom:`1px solid ${t.headerBd}`,padding:`0 ${w<480?12:w<768?16:w<1400?24:40}px`,height:54,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(135deg,#9382fa,#6d5ce8)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12,color:"#fff",flexShrink:0}}>BT</div>
+          <div>
+            <div style={{fontSize:14,fontWeight:800,color:t.textPrim,lineHeight:1.1}}>Backtest Journal</div>
+            <div style={{fontSize:10,color:t.accentText,letterSpacing:"0.06em"}}>БЭКТЕСТ</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <a href="/TJ/index.html" style={{width:32,height:32,borderRadius:8,background:t.accentDim,border:`1px solid ${t.accentBd}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,textDecoration:"none",flexShrink:0}} title="На главную">🏠</a>
+          <a href={SHEETS_URL} target="_blank" rel="noreferrer"
+            style={{padding:"6px 10px",borderRadius:7,border:`1px solid ${t.headerBd}`,background:"transparent",
+              color:t.accentText,fontSize:13,fontWeight:700,cursor:"pointer",textDecoration:"none",
+              display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+            📊{!mobile&&<span style={{fontSize:11}}>Таблица</span>}
+          </a>
+          <button onClick={()=>{setIsDark(d=>{localStorage.setItem("bt_theme",d?"light":"dark");return !d;})}}
+            style={{padding:"6px 10px",borderRadius:7,border:`1px solid ${t.headerBd}`,background:"transparent",color:t.textSec,fontSize:15,cursor:"pointer",touchAction:"manipulation"}}>
+            {isDark?"☀️":"🌙"}
+          </button>
+          <button onClick={()=>setView(v=>v==="table"?"form":"table")}
+            style={{padding:mobile?"8px 12px":"6px 14px",borderRadius:7,fontSize:mobile?13:12,fontWeight:700,cursor:"pointer",
+              background:view==="table"?t.accentDim:"rgba(128,128,128,0.07)",
+              border:`1px solid ${view==="table"?t.accent:t.cardBd}`,
+              color:view==="table"?t.accent:t.textSec,touchAction:"manipulation"}}>
+            {view==="table"?"◀ Форма":`📊 БД${bts.length>0?` (${bts.length})`:""}`}
+          </button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:"100%",margin:"0 auto",padding:`${w<480?12:w<768?16:20}px ${w<480?8:12}px 80px`}}>
+
+        {/* TABLE VIEW */}
+        {view==="table"?(
+          <>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <div style={{fontSize:mobile?15:16,fontWeight:800,color:t.textPrim}}>База бэктестов</div>
+              <button onClick={()=>{setForm(blank());setEditIdx(null);setView("form");setTab("pre");}}
+                style={{padding:mobile?"10px 14px":"8px 16px",borderRadius:8,background:t.accent,border:"none",color:t.accentDark,fontWeight:800,fontSize:mobile?13:12,cursor:"pointer",touchAction:"manipulation"}}>
+                + Новый бэктест
+              </button>
+            </div>
+            {syncStatus&&(
+              <div style={{marginBottom:10,padding:"8px 14px",borderRadius:8,fontSize:12,fontWeight:600,
+                background:syncStatus==="syncing"?t.accentDim:syncStatus==="ok"?"rgba(34,197,94,0.12)":"rgba(248,113,113,0.12)",
+                border:`1px solid ${syncStatus==="syncing"?t.accentBd:syncStatus==="ok"?"rgba(34,197,94,0.3)":"rgba(248,113,113,0.3)"}`,
+                color:syncStatus==="syncing"?t.accentText:syncStatus==="ok"?"#22c55e":"#f87171",
+                display:"flex",alignItems:"center",gap:8}}>
+                {syncStatus==="syncing"&&"⏳ Синхронизация с Google Sheets..."}
+                {syncStatus==="ok"&&"✓ Сохранено в Google Sheets"}
+                {syncStatus==="err"&&<>⚠ Ошибка синхронизации — данные сохранены локально. <a href={SHEETS_URL} target="_blank" style={{color:"inherit"}}>Открыть таблицу</a></>}
+              </div>
+            )}
+            <Stats bts={bts} t={t}/>
+            {mobile?(
+              sortedBTs.length===0?(
+                <div style={{textAlign:"center",padding:"50px 20px",color:t.textMuted}}>
+                  <div style={{fontSize:40,marginBottom:10}}>📋</div>
+                  <div style={{fontSize:14}}>Нет бэктестов</div>
+                </div>
+              ):(
+                sortedBTs.map((b,i)=><BTCard key={i} bt={b} idx={i} total={sortedBTs.length} onEdit={editBT} onDelete={deleteBT} t={t}/>)
+              )
+            ):(
+              bts.length===0?(
+                <div style={{textAlign:"center",padding:"50px 20px",color:t.textMuted}}>
+                  <div style={{fontSize:40,marginBottom:10}}>📋</div>
+                  <div style={{fontSize:14}}>Нет бэктестов</div>
+                </div>
+              ):<DesktopTable bts={bts} onEdit={editBT} onDelete={deleteBT} t={t}/>
+            )}
+          </>
+        ):(
+          <>
+            {/* TAB NAV */}
+            <div style={{display:"flex",gap:mobile?4:6,marginBottom:mobile?14:18,padding:4,borderRadius:12,background:t.tabBg,border:`1px solid ${t.tabBd}`}}>
+              {TABS.map(tb=>{
+                const active=tab===tb.id;
+                const pct=Math.round(prog[tb.id]*100);
+                return(
+                  <button key={tb.id} onClick={()=>setTab(tb.id)}
+                    style={{flex:1,padding:mobile?"10px 4px":"10px 8px",borderRadius:9,cursor:"pointer",
+                      background:active?t.cardBg:"transparent",
+                      border:`1.5px solid ${active?t.accent:"transparent"}`,
+                      transition:"all 0.2s",touchAction:"manipulation"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                      <span style={{fontSize:10,color:active?t.accent:t.textMuted}}>{tb.icon}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:active?t.textPrim:t.textSec}}>{tb.label}</span>
+                    </div>
+                    <div style={{fontSize:10,color:active?t.accentText:t.textMuted,marginTop:1}}>{tb.sub}</div>
+                    <div style={{marginTop:6,height:3,borderRadius:2,background:t.divider,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:pct===100?t.accent:t.accentText,borderRadius:2,transition:"width 0.4s"}}/>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ── PRE TAB ── */}
+            {tab==="pre"&&(
+              <div style={{animation:"fadeIn 0.25s ease"}}>
+                <Card title="Backtest" icon="📋" t={t}>
+                  <F label="Соответствует ТС?" required t={t}>
+                    <RadioPill options={["Да","Нет"]} value={form.followsTS} onChange={set("followsTS")} cols={2} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="День недели" required t={t}>
+                    <DayPicker value={form.dayOfWeek} onChange={set("dayOfWeek")} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Время входа" required t={t}>
+                    <DTInp value={form.entryTime} onChange={set("entryTime")} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Сессия" t={t}>
+                    <RadioPill options={SESSIONS} value={form.session} onChange={v=>{set("session")(v);if(v)set("sessionCustom")("");}} cols={2} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp value={form.sessionCustom} onChange={v=>{set("sessionCustom")(v);if(v)set("session")("");}} placeholder="Другая сессия..." t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                </Card>
+
+                <Card title="Анализ" icon="🔬" t={t}>
+                  <F label="Структура (Направление)" required t={t}>
+                    <RadioPill options={STRUCTURE} value={form.structure} onChange={set("structure")} cols={3} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="HTF POI" required t={t}>
+                    <RadioPill options={HTF_POI} value={form.htfPOI} onChange={set("htfPOI")} cols={3} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="LTF Entry" required t={t}>
+                    <RadioPill options={LTF_ENTRY} value={form.ltfEntry} onChange={set("ltfEntry")} cols={mobile?2:5} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Тикер" required t={t}>
+                    <RadioPill options={[...TICKERS,"Другое"]} value={form.ticker} onChange={v=>{set("ticker")(v);if(v!=="Другое")set("tickerCustom")("");}} cols={mobile?3:5} t={t} mobile={mobile}/>
+                    {form.ticker==="Другое"&&(
+                      <div style={{marginTop:8}}>
+                        <Inp value={form.tickerCustom} onChange={set("tickerCustom")} placeholder="Название тикера" t={t} mobile={mobile}/>
+                      </div>
+                    )}
+                  </F>
+                  <Hr t={t}/>
+                  <F label="BoS" t={t}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <RadioPill options={["Да","Нет"]} value={form.bos} onChange={set("bos")} cols={2} t={t} mobile={mobile}/>
+                      {form.bos==="Да"&&(
+                        <select value={form.bosTF||""} onChange={e=>set("bosTF")(e.target.value)}
+                          style={{padding:mobile?"11px 12px":"8px 10px",borderRadius:7,fontSize:mobile?15:13,
+                            border:`1.5px solid ${t.inputBd}`,background:t.inputBg,color:t.inputColor,
+                            outline:"none",cursor:"pointer",colorScheme:t.colorScheme,minWidth:80}}>
+                          <option value="">ТФ</option>
+                          {BOS_TF.map(tf=><option key={tf} value={tf}>{tf}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </F>
+                </Card>
+
+                <Card title="Расчёт позиции" icon="📈" t={t}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                    <F label="SL" required t={t}><Inp type="number" value={form.sl} onChange={set("sl")} placeholder="Стоп" t={t} mobile={mobile}/></F>
+                    <F label="Entry" required t={t}><Inp type="number" value={form.entry} onChange={set("entry")} placeholder="Вход" t={t} mobile={mobile}/></F>
+                    <F label="Target" required t={t}><Inp type="number" value={form.target} onChange={set("target")} placeholder="Цель" t={t} mobile={mobile}/></F>
+                  </div>
+                  <div style={{marginTop:10}}>
+                    <Computed label="R:R (авто)" value={rr} unit="R" accent t={t} mobile={mobile}/>
+                  </div>
+                </Card>
+
+                <Card title="Графики" icon="📊" t={t}>
+                  <F label="HTF График" required t={t}>
+                    <Inp value={form.htfChart} onChange={set("htfChart")} placeholder="Ссылка TradingView" t={t} mobile={mobile}/>
+                  </F>
+                  <F label="LTF График" required t={t}>
+                    <Inp value={form.ltfChart} onChange={set("ltfChart")} placeholder="Ссылка TradingView" t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                {/* NAV */}
+                <div style={{display:"flex",justifyContent:"flex-end",marginTop:4}}>
+                  <button onClick={()=>setTab("past")}
+                    style={{padding:mobile?"14px 28px":"11px 28px",borderRadius:11,fontSize:mobile?15:13,fontWeight:800,
+                      color:t.nextBtnColor,background:t.nextBtnBg,border:"none",cursor:"pointer",
+                      boxShadow:`0 4px 16px ${t.accent}40`,touchAction:"manipulation"}}>
+                    Далее → Past
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── PAST TAB ── */}
+            {tab==="past"&&(
+              <div style={{animation:"fadeIn 0.25s ease"}}>
+                <Card title="Закрытие" icon="⏰" t={t}>
+                  <F label="Время выхода" required t={t}>
+                    <DTInp value={form.closeTime} onChange={set("closeTime")} t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Результат" required t={t}>
+                    <RadioPill options={RESULTS} value={form.result} onChange={v=>{set("result")(v);if(v)set("resultCustom")("");}} cols={3} t={t} mobile={mobile}/>
+                    <div style={{marginTop:8}}>
+                      <Inp value={form.resultCustom} onChange={v=>{set("resultCustom")(v);if(v)set("result")("");}} placeholder="Другой результат..." t={t} mobile={mobile}/>
+                    </div>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="Closed" t={t}>
+                    <Inp value={form.closed} onChange={set("closed")} placeholder="Цена закрытия" type="number" t={t} mobile={mobile}/>
+                  </F>
+                  <Hr t={t}/>
+                  <F label="PnL" t={t}>
+                    <Inp value={form.pnl} onChange={set("pnl")} placeholder="Результат в $" type="number" t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                <Card title="Графики закрытия" icon="📊" t={t}>
+                  <F label="HTF Close" t={t}>
+                    <Inp value={form.htfClose} onChange={set("htfClose")} placeholder="Ссылка TradingView" t={t} mobile={mobile}/>
+                  </F>
+                  <F label="LTF Close" t={t}>
+                    <Inp value={form.ltfClose} onChange={set("ltfClose")} placeholder="Ссылка TradingView" t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                <Card title="Рефлексия" icon="🧠" t={t}>
+                  <F label="Что привело к такому решению?" t={t}>
+                    <TArea value={form.reason} onChange={set("reason")} placeholder="Опишите ход мыслей..." rows={3} t={t} mobile={mobile}/>
+                  </F>
+                  <F label="Как надо было действовать?" t={t}>
+                    <TArea value={form.howToAct} onChange={set("howToAct")} placeholder="Идеальный сценарий..." rows={3} t={t} mobile={mobile}/>
+                  </F>
+                </Card>
+
+                {/* NAV */}
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                  <button onClick={()=>setTab("pre")}
+                    style={{padding:mobile?"12px 20px":"9px 20px",borderRadius:11,fontSize:mobile?14:13,fontWeight:700,
+                      color:t.backBtnColor,background:"transparent",border:`1.5px solid ${t.backBtnBd}`,cursor:"pointer",touchAction:"manipulation"}}>
+                    ← Pre
+                  </button>
+                  <button onClick={saveBT}
+                    style={{padding:mobile?"14px 32px":"11px 32px",borderRadius:11,fontSize:mobile?15:13,fontWeight:800,
+                      color:t.nextBtnColor,background:t.nextBtnBg,border:"none",cursor:"pointer",
+                      boxShadow:`0 4px 16px ${t.accent}40`,touchAction:"manipulation"}}>
+                    {editIdx!==null?"💾 Обновить":"✓ Сохранить"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <style>{`
+    
+    /* Force full-width on large screens */
+    @media (min-width: 1400px) {
+      #root { width: 100% !important; }
+      #root > div { width: 100% !important; }
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+        input[type=number]{-moz-appearance:textfield}
+        ::-webkit-scrollbar{height:5px;width:5px}
+        ::-webkit-scrollbar-track{background:${t.scrollTrack}}
+        ::-webkit-scrollbar-thumb{background:${t.scrollThumb};border-radius:3px}
+        *{box-sizing:border-box}
+        input,textarea,button{-webkit-tap-highlight-color:transparent}
+      `}</style>
+    </div>
+  );
+}
+
+    const root=ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(BacktestJournal));
+  </script>
+</body>
+</html>
