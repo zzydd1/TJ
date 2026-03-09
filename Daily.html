@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#4285f4"/>
+  <title>Daily Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    html,body{margin:0;padding:0;background:#060c16;-webkit-text-size-adjust:100%;overflow-x:hidden}
+    *{box-sizing:border-box}
+    input,textarea,button,select{-webkit-tap-highlight-color:transparent;font-family:inherit}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    input[type=number]{-moz-appearance:textfield}
+    ::-webkit-scrollbar{height:4px;width:4px}
+    ::-webkit-scrollbar-track{background:#0a1020}
+    ::-webkit-scrollbar-thumb{background:#1e2d5a;border-radius:3px}
+
+    /* Force full-width on large screens */
+    @media (min-width: 1400px) {
+      #root { width: 100% !important; }
+      #root > div { width: 100% !important; }
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+    /* ── Fluid responsive layout ─────────────────────────────────── */
+    :root {
+      --px: clamp(12px, 2vw, 40px);
+      --max-w: clamp(320px, 99vw, 9999px);
+      /* Размер шрифта базовый */
+      --fs-base: clamp(13px, 1.8vw, 16px);
+      /* Размер шрифта мелкий */
+      --fs-sm: clamp(11px, 1.4vw, 13px);
+      /* Размер инпутов */
+      --input-py: clamp(9px, 1.5vw, 13px);
+      /* Размер пилюль */
+      --pill-py: clamp(7px, 1.2vw, 11px);
+      /* Gap между элементами */
+      --gap: clamp(6px, 1.2vw, 10px);
+      /* Радиус карточек */
+      --radius-card: clamp(10px, 1.5vw, 16px);
+      /* Размер тач-таргетов */
+      --touch: clamp(36px, 5vw, 48px);
+    }
+
+    /* Применяем переменные к элементам через CSS каскад */
+    #root > div { font-size: var(--fs-base) !important; }
+
+    /* Контейнер — fluid ширина */
+    #root > div > div:not([style*="position:sticky"]):not([style*="position: sticky"]) {
+      /* max-width removed for wide table support */
+      padding-left: var(--px) !important;
+      padding-right: var(--px) !important;
+    }
+
+    /* Хедер — fluid отступы */
+    #root > div > div[style*="position:sticky"],
+    #root > div > div[style*="position: sticky"] {
+      padding-left: var(--px) !important;
+      padding-right: var(--px) !important;
+    }
+
+    /* Инпуты — fluid padding */
+    input:not([type="datetime-local"]),
+    textarea,
+    select {
+      font-size: var(--fs-base) !important;
+    }
+
+    /* Кнопки-пилюли — fluid размер */
+    button {
+      min-height: var(--touch);
+    }
+
+    /* Таблица — горизонтальный скролл на узких экранах */
+    .tj-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* На широких экранах (>900px) — двухколоночный лейаут карточек */
+    @media (min-width: 900px) {
+      .tj-cards-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+      }
+    }
+
+    /* Очень маленькие экраны */
+    @media (max-width: 360px) {
+      :root {
+        --px: 10px;
+        --fs-base: 13px;
+        --fs-sm: 11px;
+      }
+    }
+
+    /* Широкие экраны — комфортные отступы */
+    @media (min-width: 1200px) {
+      :root {
+        --fs-base: 15px;
+        --input-py: 11px;
+      }
+    }
+    /* ────────────────────────────────────────────────────────────── */
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    window.storage={
+      get:async(k)=>{try{const v=localStorage.getItem(k);if(v===null)throw new Error('not found');return{key:k,value:v};}catch(e){throw e;}},
+      set:async(k,v)=>{try{localStorage.setItem(k,v);return{key:k,value:v};}catch(e){return null;}},
+      delete:async(k)=>{try{localStorage.removeItem(k);return{key:k,deleted:true};}catch(e){return null;}},
+      list:async(pfx)=>{try{const keys=Object.keys(localStorage).filter(k=>!pfx||k.startsWith(pfx));return{keys};}catch(e){return{keys:[]};}}
+    };
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+const {useState,useEffect,useMemo,useCallback,useRef}=React;
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const WEEKDAYS    = ["Понедельник","Вторник","Среда","Четверг","Пятница"];
+const WEEKEND     = ["Суббота","Воскресенье"];
+const SLEEP_OPTS  = ["5 (> 8 ч)","4 (7-8 ч)","3 (6-7 ч)","2 (5-6 ч)","1 (4-5 ч)","0 (< 4 ч)"];
+const MOOD_OPTS   = ["Бодрое","Загружен","Нормальное","Не очень","Расстроен"];
+const LAST3_OPTS  = ["2R","1R","0","-1R","-2R"];
+const ACCOUNTS    = ["А Финам","С Финам","A Bybit","С Bybit","С Форекс","J2T"];
+const ACCENT      = "#4285f4";
+const ACCENT2     = "#1a73e8";
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const fmtDT  = (iso) => !iso ? "—" : new Date(iso).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const todayKey   = () => new Date().toISOString().slice(0,10);
+const currentDay = () => ["Воскресенье","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота"][new Date().getDay()];
+
+// ─── GOOGLE SHEETS CONFIG ─────────────────────────────────────────────────────
+// Вставьте сюда URL вашего Apps Script после развёртывания:
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMn7UQmz3eZ3tuKy85fA-f78ZY3hKqaTIqaCZpcMv1AgmLvY0WV08IrXXW1GycrHUvCA/exec";
+
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+const parseMoscowDate=(s)=>{if(!s)return null;const m=s.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);if(!m)return s;return m[3]+"-"+m[2]+"-"+m[1]+"T"+m[4]+":"+m[5]+":00+03:00";};
+const loadEntries=async()=>{
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+"?type=daily");
+    const json=await res.json();
+    if(json.status==="ok"&&json.rows&&json.rows.length){
+      const accs=["А Финам","С Финам","A Bybit","С Bybit","С Форекс","J2T"];
+      return json.rows.map(r=>({
+        timestamp:parseMoscowDate(r["Отметка времени"])||r["Отметка времени"]||"",
+        dayOfWeek:r["День недели"]||"",sleepQuality:r["Качество сна"]||"",
+        feelingWell:r["Хорошо ли себя чувствую"]||"",mood:r["Настроение"]||"",
+        hasPlan:r["Составлен план"]||"",activity:r["Активность"]||"",
+        mainProblem:r["Основная проблема"]||"",solution:r["Решение"]||"",
+        last3trades:[],last3custom:[],
+        tradesEffect:r["Как результаты влияют"]||"",whyTrading:r["Ради чего торгую"]||"",
+        balances:Object.fromEntries(accs.map(a=>[a,r[a]||""])),
+      }));
+    }
+  }catch(e){console.warn("Sheets load failed:",e);}
+  try{const r=await window.storage.get("daily_entries2");return r?JSON.parse(r.value):[];}catch{return[];}
+};
+const saveEntries=async(d)=>{try{await window.storage.set("daily_entries2",JSON.stringify(d));}catch{}};
+
+// ─── SYNC TO GOOGLE SHEETS ────────────────────────────────────────────────────
+const syncToSheets = async(entry)=>{
+  if(!APPS_SCRIPT_URL||APPS_SCRIPT_URL==="YOUR_APPS_SCRIPT_URL_HERE") return;
+  try{
+    const row=[
+      entry.timestamp,
+      entry.dayOfWeek,
+      entry.sleepQuality,
+      entry.feelingWell,
+      entry.mood||entry.moodCustom,
+      entry.hasPlan,
+      entry.activity,
+      entry.mainProblem,
+      entry.solution,
+      [...(entry.last3trades||[]).map((v,i)=>v||(entry.last3custom||[])[i]||"").filter(Boolean)].join(", "),
+      entry.tradesEffect,
+      entry.whyTrading,
+      ...(ACCOUNTS.map(a=>entry.balances?.[a]||"")),
+    ];
+    await fetch(APPS_SCRIPT_URL,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain"},body:JSON.stringify({type:"daily",row}),
+    });
+  }catch(err){console.warn("Sheets sync failed:",err);}
+};
+
+// ─── BLANK ────────────────────────────────────────────────────────────────────
+const blank = () => ({
+  dayOfWeek:currentDay(),
+  sleepQuality:"",feelingWell:"",feelingComment:"",mood:"",moodCustom:"",hasPlan:"",activity:"",
+  mainProblem:"",solution:"",
+  last3trades:[],last3custom:[],
+  tradesEffect:"",whyTrading:"",
+  balances:Object.fromEntries(ACCOUNTS.map(a=>[a,""])),
+  timestamp:"",
+});
+
+// ─── RESPONSIVE HOOK ──────────────────────────────────────────────────────────
+function useWindowWidth(){
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:800);
+  useEffect(()=>{
+    const h=()=>setW(window.innerWidth);
+    window.addEventListener("resize",h);
+    return()=>window.removeEventListener("resize",h);
+  },[]);
+  return w;
+}
+
+// ─── THEMES ───────────────────────────────────────────────────────────────────
+const DARK={
+  bg:"#06091a",
+  headerBg:`linear-gradient(135deg,#0d1535,#0a1228)`,headerBd:"#1a2550",
+  cardBg:"rgba(255,255,255,0.03)",cardBd:"#1a2550",
+  inputBg:"#0d1535",inputBd:"#1e2d5a",inputColor:"#c8d6ff",
+  labelColor:"#6b84c8",textPrim:"#dde6ff",textSec:"#8898cc",textMuted:"#3a4a7e",
+  accent:ACCENT,accentDim:"rgba(66,133,244,0.14)",accentBd:"#2a4a9e",accentText:"#6a9ef8",accentDark:"#ffffff",
+  pillBd:"#1e2d5a",pillBg:"rgba(255,255,255,0.03)",
+  divider:"#121d42",tabBg:"#080d20",tabBd:"#151f45",
+  computedBg:"linear-gradient(135deg,rgba(66,133,244,0.08),rgba(26,115,232,0.05))",computedBd:"#1e3070",
+  statBg:"#0a1228",statBd:"#151f45",
+  scrollTrack:"#080d20",scrollThumb:"#1e2d5a",colorScheme:"dark",
+  badgeTake:{bg:"rgba(0,200,100,0.15)",color:"#22c55e"},
+  badgeStop:{bg:"rgba(240,60,60,0.15)",color:"#f87171"},
+  badgeOther:{bg:"rgba(66,133,244,0.15)",color:"#60a5fa"},
+  nextBtnBg:`linear-gradient(135deg,${ACCENT},${ACCENT2})`,nextBtnColor:"#ffffff",
+  backBtnBd:"#1e2d5a",backBtnColor:"#5a7ac8",
+  thBg:"#080d20",thColor:ACCENT,trEven:"#06091a",trOdd:"#090e22",trBd:"#0d1535",
+};
+const LIGHT={
+  bg:"#f0f4ff",
+  headerBg:`linear-gradient(135deg,${ACCENT},${ACCENT2})`,headerBd:"#c5d8ff",
+  cardBg:"#ffffff",cardBd:"#d8e4ff",
+  inputBg:"#ffffff",inputBd:"#c5d4f5",inputColor:"#1a2560",
+  labelColor:"#4a6ab8",textPrim:"#1a2560",textSec:"#3a56a0",textMuted:"#8898cc",
+  accent:ACCENT,accentDim:"rgba(66,133,244,0.08)",accentBd:"#a8c0f8",accentText:ACCENT,accentDark:"#ffffff",
+  pillBd:"#c5d4f5",pillBg:"#f5f8ff",
+  divider:"#dce8ff",tabBg:"#eaf0ff",tabBd:"#c5d4f5",
+  computedBg:"linear-gradient(135deg,#e8f0fe,#f0f4ff)",computedBd:"#a8c0f8",
+  statBg:"#f5f8ff",statBd:"#d8e4ff",
+  scrollTrack:"#eaf0ff",scrollThumb:"#a8c0f8",colorScheme:"light",
+  badgeTake:{bg:"#dcfce7",color:"#166534"},
+  badgeStop:{bg:"#fee2e2",color:"#991b1b"},
+  badgeOther:{bg:"#dbeafe",color:"#1e40af"},
+  nextBtnBg:`linear-gradient(135deg,${ACCENT},${ACCENT2})`,nextBtnColor:"#ffffff",
+  backBtnBd:"#c5d4f5",backBtnColor:"#4a6ab8",
+  thBg:"#eaf0ff",thColor:ACCENT,trEven:"#ffffff",trOdd:"#f5f8ff",trBd:"#e8f0fe",
+};
+
+// ─── UI ATOMS ─────────────────────────────────────────────────────────────────
+const Lbl=({children,required,t})=>(
+  <div style={{fontSize:11,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:t.labelColor,marginBottom:7}}>
+    {children}{required&&<span style={{color:"#f87171",marginLeft:3}}>*</span>}
+  </div>
+);
+
+const Pill=({o,active,onClick,t,mobile})=>(
+  <button onClick={onClick} style={{
+    padding:mobile?"11px 6px":"8px 6px",borderRadius:7,
+    fontSize:mobile?13:12.5,fontWeight:active?700:500,
+    border:`1.5px solid ${active?t.accent:t.pillBd}`,
+    background:active?t.accentDim:t.pillBg,
+    color:active?t.accent:t.textSec,cursor:"pointer",
+    transition:"all 0.15s",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+    boxShadow:active?`0 0 0 3px ${t.accent}22`:"none",
+    minHeight:mobile?46:36,touchAction:"manipulation",
+  }}>{o}</button>
+);
+
+const DayPicker=({value,onChange,t,mobile})=>{
+  const all=[...WEEKDAYS,...WEEKEND];
+  if(mobile){
+    return(
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+        {all.map(d=><Pill key={d} o={d.slice(0,3)} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t} mobile/>)}
+      </div>
+    );
+  }
+  return(
+    <div style={{display:"flex",gap:6,alignItems:"flex-start"}}>
+      <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+        {WEEKDAYS.map(d=><Pill key={d} o={d} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t}/>)}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6,minWidth:96}}>
+        {WEEKEND.map(d=><Pill key={d} o={d} active={value===d} onClick={()=>onChange(value===d?"":d)} t={t}/>)}
+      </div>
+    </div>
+  );
+};
+
+const RadioPill=({options,value,onChange,cols=3,t,mobile})=>{
+  const c=mobile?Math.min(2,cols):cols;
+  return(
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${c},1fr)`,gap:mobile?8:6}}>
+      {options.map(o=><Pill key={o} o={o} active={value===o} onClick={()=>onChange(value===o?"":o)} t={t} mobile={mobile}/>)}
+    </div>
+  );
+};
+
+const CheckPill=({options,value=[],onChange,t,mobile})=>(
+  <div style={{display:"flex",flexDirection:"column",gap:mobile?8:6}}>
+    {options.map(o=>{
+      const on=value.includes(o);
+      return(
+        <button key={o} onClick={()=>onChange(on?value.filter(x=>x!==o):[...value,o])}
+          style={{padding:mobile?"12px 14px":"9px 14px",borderRadius:7,
+            fontSize:mobile?14:13,fontWeight:on?700:400,
+            border:`1.5px solid ${on?t.accent:t.pillBd}`,
+            background:on?t.accentDim:t.pillBg,
+            color:on?t.accent:t.textSec,cursor:"pointer",textAlign:"left",
+            transition:"all 0.15s",display:"flex",alignItems:"center",gap:10,
+            boxShadow:on?`0 0 0 3px ${t.accent}22`:"none",
+            minHeight:mobile?50:40,touchAction:"manipulation"}}>
+          <div style={{width:mobile?18:16,height:mobile?18:16,borderRadius:4,flexShrink:0,
+            border:`2px solid ${on?t.accent:t.pillBd}`,background:on?t.accent:"transparent",
+            display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>
+            {on&&<svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4L4 7L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+          </div>
+          {o}
+        </button>
+      );
+    })}
+  </div>
+);
+
+const Inp=({value,onChange,placeholder,type="text",t,mobile,suffix})=>(
+  <div style={{position:"relative"}}>
+    <input type={type} value={value??""} onChange={e=>onChange(e.target.value)}
+      placeholder={placeholder||""}
+      style={{width:"100%",padding:mobile?"13px 14px":"10px 14px",borderRadius:8,
+        fontSize:mobile?16:13,border:`1.5px solid ${t.inputBd}`,
+        background:t.inputBg,color:t.inputColor,outline:"none",boxSizing:"border-box",
+        fontFamily:"'DM Sans',sans-serif",paddingRight:suffix?44:undefined,
+        transition:"border-color 0.15s,box-shadow 0.15s",colorScheme:t.colorScheme}}
+      onFocus={e=>{e.target.style.borderColor=t.accent;e.target.style.boxShadow=`0 0 0 3px ${t.accent}22`;}}
+      onBlur={e=>{e.target.style.borderColor=t.inputBd;e.target.style.boxShadow="none";}}/>
+    {suffix&&<span style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",fontSize:11,color:t.textMuted}}>{suffix}</span>}
+  </div>
+);
+
+const TArea=({value,onChange,placeholder,rows=3,t,mobile})=>(
+  <textarea value={value??""} onChange={e=>onChange(e.target.value)}
+    placeholder={placeholder} rows={rows}
+    style={{width:"100%",padding:mobile?"13px 14px":"10px 14px",borderRadius:8,
+      fontSize:mobile?15:13,border:`1.5px solid ${t.inputBd}`,
+      background:t.inputBg,color:t.inputColor,outline:"none",resize:"vertical",
+      boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif",lineHeight:1.6}}
+    onFocus={e=>{e.target.style.borderColor=t.accent;e.target.style.boxShadow=`0 0 0 3px ${t.accent}22`;}}
+    onBlur={e=>{e.target.style.borderColor=t.inputBd;e.target.style.boxShadow="none";}}/>
+);
+
+const Card=({title,icon,children,t,accent})=>(
+  <div style={{background:t.cardBg,borderRadius:14,border:`1px solid ${accent?t.accentBd:t.cardBd}`,padding:"18px 18px 14px",marginBottom:14,boxShadow:accent?`0 2px 16px ${t.accent}18`:"none"}}>
+    {title&&(
+      <div style={{fontSize:11,fontWeight:800,color:t.accentText,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:16,display:"flex",alignItems:"center",gap:8,paddingBottom:10,borderBottom:`1px solid ${t.divider}`}}>
+        <span style={{fontSize:15}}>{icon}</span>{title}
+      </div>
+    )}
+    {children}
+  </div>
+);
+
+const Hr=({t})=><div style={{height:1,background:t.divider,margin:"14px 0"}}/>;
+
+const F=({label,required,children,t,hint})=>(
+  <div style={{marginBottom:18}}>
+    {label&&<Lbl required={required} t={t}>{label}</Lbl>}
+    {hint&&<div style={{fontSize:11,color:t.textMuted,marginBottom:6,marginTop:-4}}>{hint}</div>}
+    {children}
+  </div>
+);
+
+// ─── MOBILE ENTRY CARD ────────────────────────────────────────────────────────
+function EntryCard({entry,idx,total,onEdit,onDelete,t}){
+  const [open,setOpen]=useState(false);
+  const sleepColor=parseInt(entry.sleepQuality)>=4?"#22c55e":parseInt(entry.sleepQuality)>=3?"#facc15":"#f87171";
+  return(
+    <div style={{background:t.cardBg,border:`1px solid ${t.cardBd}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+        <div style={{width:32,height:32,borderRadius:8,background:t.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:t.accent,flexShrink:0}}>{total-idx}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:t.textPrim}}>{entry.dayOfWeek||"—"}</div>
+          <div style={{fontSize:11,color:t.textMuted,marginTop:2}}>{fmtDT(entry.timestamp)}</div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0,display:"flex",flexDirection:"column",gap:3,alignItems:"flex-end"}}>
+          {entry.sleepQuality&&<span style={{fontSize:11,fontWeight:700,color:sleepColor}}>💤 {entry.sleepQuality.split(" ")[0]}</span>}
+          {entry.mood&&<span style={{fontSize:11,color:t.textSec}}>{entry.mood}</span>}
+          {!entry.mood&&entry.moodCustom&&<span style={{fontSize:11,color:t.textSec}}>{entry.moodCustom}</span>}
+        </div>
+        <div style={{fontSize:14,color:t.textMuted,marginLeft:4}}>{open?"▲":"▼"}</div>
+      </div>
+      {open&&(
+        <div style={{padding:"0 16px 16px",borderTop:`1px solid ${t.divider}`}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
+            {[
+              ["Сон",entry.sleepQuality],["Самочувствие",entry.feelingWell],
+              ["Настроение",entry.mood||entry.moodCustom],["План",entry.hasPlan],
+              ["Активность",entry.activity],["3 сделки",(entry.last3trades||[]).map((v,i)=>v||(entry.last3custom||[])[i]||"").filter(Boolean).map((v,i)=>`${i+1}.${v}`).join(" ")],
+            ].map(([k,v])=>v?(
+              <div key={k} style={{background:t.tabBg,borderRadius:8,padding:"8px 10px"}}>
+                <div style={{fontSize:10,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{k}</div>
+                <div style={{fontSize:13,fontWeight:600,color:t.textSec,marginTop:2}}>{v}</div>
+              </div>
+            ):null)}
+          </div>
+          {(entry.mainProblem||entry.solution)&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:10}}>
+              {entry.mainProblem&&<div style={{padding:"10px 12px",borderRadius:8,background:t.tabBg}}>
+                <div style={{fontSize:10,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Проблема</div>
+                <div style={{fontSize:13,color:t.textSec,lineHeight:1.5}}>{entry.mainProblem}</div>
+              </div>}
+              {entry.solution&&<div style={{padding:"10px 12px",borderRadius:8,background:t.tabBg}}>
+                <div style={{fontSize:10,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Решение</div>
+                <div style={{fontSize:13,color:t.textSec,lineHeight:1.5}}>{entry.solution}</div>
+              </div>}
+            </div>
+          )}
+          {/* Balances */}
+          {Object.values(entry.balances||{}).some(v=>v)&&(
+            <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:t.accentDim,border:`1px solid ${t.accentBd}`}}>
+              <div style={{fontSize:10,color:t.accentText,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6,fontWeight:700}}>Балансы</div>
+              {ACCOUNTS.filter(a=>entry.balances?.[a]).map(a=>(
+                <div key={a} style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                  <span style={{fontSize:12,color:t.textSec}}>{a}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:t.accent,fontFamily:"monospace"}}>{parseFloat(entry.balances[a]).toLocaleString("ru-RU")}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{display:"flex",gap:8,marginTop:12}}>
+            <button onClick={()=>onEdit(idx)} style={{flex:1,padding:"11px",borderRadius:8,background:"transparent",border:`1.5px solid ${t.accent}`,color:t.accent,fontSize:13,fontWeight:700,cursor:"pointer",touchAction:"manipulation"}}>✏️ Изменить</button>
+            <button onClick={()=>onDelete(idx)} style={{flex:1,padding:"11px",borderRadius:8,background:"transparent",border:"1.5px solid #f87171",color:"#f87171",fontSize:13,fontWeight:700,cursor:"pointer",touchAction:"manipulation"}}>🗑 Удалить</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DESKTOP TABLE ────────────────────────────────────────────────────────────
+const COLS=[
+  {k:"timestamp",h:"Время",fmt:fmtDT},{k:"dayOfWeek",h:"День"},
+  {k:"sleepQuality",h:"Сон"},{k:"feelingWell",h:"Чувствую"},{k:"mood",h:"Настроение",fmt:(v,row)=>v||row?.moodCustom||"—"},
+  {k:"hasPlan",h:"План"},{k:"activity",h:"Акт-ть"},
+  {k:"mainProblem",h:"Проблема"},{k:"solution",h:"Решение"},
+  {k:"last3trades",h:"3 сделки",fmt:v=>(v||[]).join(", ")},
+  {k:"tradesEffect",h:"Влияние"},{k:"whyTrading",h:"Ради чего"},
+  ...ACCOUNTS.map(a=>({k:`bal_${a}`,h:a,mono:1,fmt:(v,row)=>row?.balances?.[a]||"—"})),
+];
+
+function DesktopTable({entries,onEdit,onDelete,t}){
+  const sorted=[...entries].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+  const th={padding:"8px 10px",textAlign:"left",color:t.thColor,fontWeight:700,fontSize:10,letterSpacing:"0.07em",textTransform:"uppercase",borderRight:`1px solid ${t.trBd}`,whiteSpace:"nowrap",background:t.thBg};
+  const td={padding:"7px 10px",color:t.textSec,borderRight:`1px solid ${t.trBd}`,verticalAlign:"top",textAlign:"left",fontSize:12};
+  return(
+    <div style={{overflowX:"auto",borderRadius:12,border:`1px solid ${t.cardBd}`}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr>
+          <th style={{...th,width:36}}>#</th>
+          {COLS.map(c=><th key={c.k} style={th}>{c.h}</th>)}
+          <th style={th}>⚙</th>
+        </tr></thead>
+        <tbody>
+          {sorted.map((row,i)=>(
+            <tr key={i} style={{background:i%2===0?t.trEven:t.trOdd,borderBottom:`1px solid ${t.trBd}`}}>
+              <td style={{...td,color:t.textMuted,textAlign:"center"}}>{sorted.length-i}</td>
+              {COLS.map(c=>{
+                let v=c.fmt?c.fmt(row[c.k],row):(row[c.k]??"");
+                if(v===""||v===null||v===undefined) v="—";
+                return<td key={c.k} style={{...td,fontFamily:c.mono?"'JetBrains Mono',monospace":"inherit",whiteSpace:["mainProblem","solution","tradesEffect","whyTrading"].includes(c.k)?"normal":"nowrap"}}>{v}</td>;
+              })}
+              <td style={{...td,whiteSpace:"nowrap"}}>
+                <button onClick={()=>onEdit(i)} style={{padding:"3px 7px",borderRadius:5,background:"transparent",border:`1px solid ${t.backBtnBd}`,color:"#60a5fa",cursor:"pointer",fontSize:10,marginRight:3}}>✏️</button>
+                <button onClick={()=>onDelete(i)} style={{padding:"3px 7px",borderRadius:5,background:"transparent",border:`1px solid ${t.backBtnBd}`,color:"#f87171",cursor:"pointer",fontSize:10}}>🗑</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+function Stats({entries,t,mobile}){
+  const total=entries.length;
+  const avgSleep=total?(entries.reduce((s,e)=>s+(parseInt(e.sleepQuality)||0),0)/total).toFixed(1):"—";
+  const goodMood=entries.filter(e=>["Бодрое","Нормальное"].includes(e.mood||e.moodCustom)).length;
+  const withPlan=entries.filter(e=>e.hasPlan==="Да").length;
+  const box=(label,value,color)=>(
+    <div style={{background:t.statBg,borderRadius:10,padding:mobile?"10px 12px":"12px 16px",border:`1px solid ${t.statBd}`,flex:1,minWidth:0}}>
+      <div style={{fontSize:9,color:t.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{label}</div>
+      <div style={{fontSize:mobile?18:20,fontWeight:800,color,fontFamily:"'JetBrains Mono',monospace"}}>{value}</div>
+    </div>
+  );
+  return(
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+      {box("Записей",total,t.accent)}
+      {box("Avg сон",avgSleep,"#a78bfa")}
+      {box("Хор. настр.",goodMood,"#22c55e")}
+      {box("С планом",withPlan,"#facc15")}
+    </div>
+  );
+}
+
+// ─── PROGRESS BAR ─────────────────────────────────────────────────────────────
+function ProgressBar({value,t}){
+  const pct=Math.round(value*100);
+  return(
+    <div style={{marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+        <span style={{fontSize:11,color:t.labelColor,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em"}}>Заполнено</span>
+        <span style={{fontSize:12,fontWeight:800,color:t.accent}}>{pct}%</span>
+      </div>
+      <div style={{height:5,borderRadius:3,background:t.divider,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${t.accent},${ACCENT2})`,borderRadius:3,transition:"width 0.4s"}}/>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function DailyJournal(){
+  const [isDark,setIsDark]=useState(true);
+  const t=isDark?DARK:LIGHT;
+  const w=useWindowWidth(); const mobile=w<640;
+
+  const [view,setView]=useState("form");
+  const [entries,setEntries]=useState([]);
+  const [editIdx,setEditIdx]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [form,setForm]=useState(blank());
+  const [saved,setSaved]=useState(false);
+
+  useEffect(()=>{
+    (async()=>{const d=await loadEntries();setEntries(d);setLoading(false);})();
+  },[]);
+
+  const set=(key)=>(val)=>setForm(p=>({...p,[key]:val}));
+  const setBal=(acc)=>(val)=>setForm(p=>({...p,balances:{...p.balances,[acc]:val}}));
+
+  const progress=useMemo(()=>{
+    const fields=[
+      form.dayOfWeek,form.sleepQuality,form.feelingWell,form.mood||form.moodCustom,
+      form.hasPlan,form.activity,form.mainProblem,form.solution,
+      form.last3trades.length>0,form.tradesEffect,form.whyTrading,
+      Object.values(form.balances).some(v=>v!==""),
+    ];
+    return fields.filter(Boolean).length/fields.length;
+  },[form]);
+
+  const saveEntry=()=>{
+    const entry={...form,timestamp:editIdx!==null?entries[editIdx].timestamp:new Date().toISOString()};
+    const updated=editIdx!==null?entries.map((e,i)=>i===editIdx?entry:e):[entry,...entries];
+    setEntries(updated);saveEntries(updated);
+    if(editIdx===null) syncToSheets(entry); // отправка новой записи в Google Sheets
+    setForm(blank());setEditIdx(null);setSaved(true);
+    setTimeout(()=>setSaved(false),3000);
+    setView("table");
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
+
+  const sortedEntries=useMemo(()=>[...entries].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)),[entries]);
+
+  const editEntry=(ti)=>{
+    const entry=sortedEntries[ti];
+    const ri=entries.indexOf(entry);
+    setForm({...blank(),...entry});
+    setEditIdx(ri);setView("form");
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
+  const deleteEntry=(ti)=>{
+    const entry=sortedEntries[ti];
+    const updated=entries.filter(e=>e!==entry);
+    setEntries(updated);saveEntries(updated);
+  };
+
+  const totalBalance=ACCOUNTS.reduce((s,a)=>s+(parseFloat(form.balances[a])||0),0);
+
+  if(loading) return(
+    <div style={{minHeight:"100vh",background:DARK.bg,display:"flex",alignItems:"center",justifyContent:"center",color:ACCENT,fontFamily:"monospace",fontSize:14}}>
+      Загрузка...
+    </div>
+  );
+
+  const nBtn={padding:mobile?"14px 20px":"12px 28px",borderRadius:10,background:t.nextBtnBg,border:"none",color:"#ffffff",fontWeight:800,fontSize:mobile?15:14,cursor:"pointer",boxShadow:`0 4px 20px ${ACCENT}44`,touchAction:"manipulation",flex:mobile?1:undefined};
+
+  return(
+    <div style={{minHeight:"100vh",background:t.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif",color:t.textPrim}}>
+      
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+      {/* SAVED TOAST */}
+      {saved&&(
+        <div style={{position:"fixed",top:mobile?60:70,left:"50%",transform:"translateX(-50%)",padding:"10px 24px",borderRadius:10,background:ACCENT,color:"#fff",fontWeight:700,fontSize:13,zIndex:999,boxShadow:`0 4px 20px ${ACCENT}66`,whiteSpace:"nowrap"}}>
+          ✓ Запись сохранена
+        </div>
+      )}
+
+      {/* HEADER */}
+      <div style={{background:t.headerBg,borderBottom:`1px solid ${t.headerBd}`,padding:`0 ${mobile?14:24}px`,display:"flex",alignItems:"center",justifyContent:"space-between",height:mobile?52:60,position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:mobile?8:14}}>
+          <div style={{width:38,height:38,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:15,color:"#fff",flexShrink:0}}>D</div>
+          <div>
+            <div style={{fontSize:mobile?13:15,fontWeight:800,color:"#ffffff"}}>Daily Journal</div>
+            {!mobile&&<div style={{fontSize:10,color:"rgba(255,255,255,0.6)",letterSpacing:"0.06em"}}>ЕЖЕДНЕВНЫЙ ЧЕК-ЛИСТ</div>}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:mobile?6:10,alignItems:"center"}}>
+          <a href="/TJ/index.html" style={{width:38,height:38,borderRadius:9,background:"rgba(255,255,255,0.15)",border:"1.5px solid rgba(255,255,255,0.25)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",touchAction:"manipulation"}} title="На главную">🏠</a>
+          <button onClick={()=>setIsDark(d=>!d)}
+            style={{width:38,height:38,borderRadius:9,background:"rgba(255,255,255,0.15)",border:"1.5px solid rgba(255,255,255,0.25)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"}}>
+            {isDark?"☀️":"🌙"}
+          </button>
+          <button onClick={()=>setView(view==="table"?"form":"table")}
+            style={{padding:mobile?"8px 12px":"7px 16px",borderRadius:8,fontSize:mobile?13:12,fontWeight:700,cursor:"pointer",background:"rgba(255,255,255,0.15)",border:"1.5px solid rgba(255,255,255,0.25)",color:"#ffffff",touchAction:"manipulation"}}>
+            {view==="table"?"◀ Форма":`📊${mobile?"":` История`}${entries.length>0?` (${entries.length})`:""}`}
+          </button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:"100%",margin:"0 auto",padding:`${w<480?12:w<768?16:w<1400?20:28}px ${w<480?8:w<768?12:20}px 80px`}}>
+
+        {/* TABLE VIEW */}
+        {view==="table"?(
+          <>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <div style={{fontSize:mobile?15:17,fontWeight:800,color:t.textPrim}}>История записей</div>
+              <button onClick={()=>{setForm(blank());setEditIdx(null);setView("form");}}
+                style={{padding:mobile?"10px 14px":"8px 18px",borderRadius:9,background:t.accent,border:"none",color:"#fff",fontWeight:800,fontSize:mobile?13:12,cursor:"pointer",touchAction:"manipulation"}}>
+                + Запись
+              </button>
+            </div>
+            <Stats entries={entries} t={t} mobile={mobile}/>
+            {mobile?(
+              sortedEntries.length===0?(
+                <div style={{textAlign:"center",padding:"50px 20px",color:t.textMuted}}>
+                  <div style={{fontSize:40,marginBottom:10}}>📋</div>
+                  <div style={{fontSize:14}}>Нет записей</div>
+                </div>
+              ):(
+                sortedEntries.map((e,i)=><EntryCard key={i} entry={e} idx={i} total={sortedEntries.length} onEdit={editEntry} onDelete={deleteEntry} t={t}/>)
+              )
+            ):(
+              entries.length===0?(
+                <div style={{textAlign:"center",padding:"50px 20px",color:t.textMuted}}>
+                  <div style={{fontSize:40,marginBottom:10}}>📋</div>
+                  <div style={{fontSize:14}}>Нет записей</div>
+                </div>
+              ):<DesktopTable entries={entries} onEdit={editEntry} onDelete={deleteEntry} t={t}/>
+            )}
+          </>
+        ):(
+          <div style={{animation:"fadeIn 0.25s ease"}}>
+            <ProgressBar value={progress} t={t}/>
+
+            <div style={{marginBottom:16,padding:"10px 14px",borderRadius:10,background:t.accentDim,border:`1px solid ${t.accentBd}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:12,color:t.accentText,fontWeight:700}}>📅 {todayKey()}</span>
+              {editIdx!==null&&<span style={{fontSize:11,padding:"3px 10px",borderRadius:20,background:t.accentDim,color:t.accent,border:`1px solid ${t.accentBd}`,fontWeight:700}}>✏️ Редактирование</span>}
+            </div>
+
+            {/* SECTION 1 */}
+            <Card title="Состояние" icon="🌅" t={t}>
+              <F label="День недели" required t={t}>
+                <DayPicker value={form.dayOfWeek} onChange={set("dayOfWeek")} t={t} mobile={mobile}/>
+              </F>
+              <Hr t={t}/>
+              <F label="Качество сна?" required t={t} hint="Количество и качество сна прошлой ночью">
+                <RadioPill options={SLEEP_OPTS} value={form.sleepQuality} onChange={set("sleepQuality")} cols={mobile?2:3} t={t} mobile={mobile}/>
+              </F>
+              <Hr t={t}/>
+              <F label="Хорошо ли себя чувствую?" required t={t}>
+                <RadioPill options={["Да","Нет"]} value={form.feelingWell} onChange={set("feelingWell")} cols={2} t={t} mobile={mobile}/>
+                <div style={{marginTop:8}}>
+                  <Inp value={form.feelingComment} onChange={set("feelingComment")} placeholder="Комментарий (необязательно)..." t={t} mobile={mobile}/>
+                </div>
+              </F>
+              <Hr t={t}/>
+              <F label="Настроение" required t={t}>
+                <RadioPill options={MOOD_OPTS} value={form.mood} onChange={v=>{set("mood")(v);if(v)set("moodCustom")("");}} cols={mobile?2:3} t={t} mobile={mobile}/>
+                <div style={{marginTop:8}}>
+                  <Inp value={form.moodCustom} onChange={v=>{set("moodCustom")(v);if(v)set("mood")("");}} placeholder="Другое настроение..." t={t} mobile={mobile}/>
+                </div>
+              </F>
+              <Hr t={t}/>
+              <F label="Активность" required t={t} hint="Физическая активность сегодня">
+                <RadioPill options={["Да","Нет"]} value={form.activity} onChange={set("activity")} cols={2} t={t} mobile={mobile}/>
+              </F>
+            </Card>
+
+            {/* SECTION 2 */}
+            <Card title="Рефлексия" icon="🧠" t={t}>
+              <F label="Основная проблема" required t={t}>
+                <TArea value={form.mainProblem} onChange={set("mainProblem")} placeholder="Опишите основную проблему дня..." rows={mobile?4:3} t={t} mobile={mobile}/>
+              </F>
+              <F label="Решение" required t={t}>
+                <TArea value={form.solution} onChange={set("solution")} placeholder="Как решить эту проблему?" rows={mobile?4:3} t={t} mobile={mobile}/>
+              </F>
+            </Card>
+
+            {/* SECTION 4 */}
+            <Card title="Торговля" icon="📈" t={t} accent>
+              <F label="Составлен план?" required t={t}>
+                <RadioPill options={["Да","Нет"]} value={form.hasPlan} onChange={set("hasPlan")} cols={2} t={t} mobile={mobile}/>
+              </F>
+              <Hr t={t}/>
+              <F label="Последние 3 сделки" t={t} hint="Выберите результат для каждой сделки">
+                {[0,1,2].map(idx=>(
+                  <div key={idx} style={{marginBottom:10}}>
+                    <div style={{fontSize:11,color:t.textMuted,fontWeight:600,marginBottom:5}}>{idx+1}.</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:4}}>
+                      {LAST3_OPTS.map(o=>{
+                        const active=(form.last3trades[idx]||"")==o;
+                        return(
+                          <button key={o} onClick={()=>{const arr=[...form.last3trades];arr[idx]=active?"":o;set("last3trades")(arr);}}
+                            style={{padding:mobile?"10px 10px":"7px 10px",borderRadius:7,fontSize:mobile?13:12,fontWeight:active?800:500,
+                              border:`1.5px solid ${active?t.accent:t.pillBd}`,background:active?t.accentDim:t.pillBg,
+                              color:active?t.accent:t.textSec,cursor:"pointer",
+                              boxShadow:active?`0 0 0 3px ${t.accent}22`:"none",minHeight:mobile?40:32,touchAction:"manipulation"}}>
+                            {o}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Inp value={(form.last3custom||[])[idx]||""} onChange={v=>{const arr=[...(form.last3custom||[])];arr[idx]=v;set("last3custom")(arr);}} placeholder="Свой вариант..." t={t} mobile={mobile}/>
+                  </div>
+                ))}
+              </F>
+              <Hr t={t}/>
+              <F label="Как эти результаты на меня влияют?" required t={t}>
+                <TArea value={form.tradesEffect} onChange={set("tradesEffect")} placeholder="Опишите своё эмоциональное состояние..." rows={mobile?4:3} t={t} mobile={mobile}/>
+              </F>
+              <Hr t={t}/>
+              <F label="Ради чего я торгую?" required t={t}>
+                <TArea value={form.whyTrading} onChange={set("whyTrading")} placeholder="Ваша мотивация и цель в трейдинге..." rows={mobile?4:3} t={t} mobile={mobile}/>
+              </F>
+            </Card>
+
+            {/* SECTION 5 */}
+            <Card title="Балансы счетов" icon="💰" t={t}>
+              <div style={{marginBottom:12,fontSize:12,color:t.textMuted}}>
+                Укажите актуальные балансы. Используются в расчётах сделок.
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12}}>
+                {ACCOUNTS.map(acc=>(
+                  <F key={acc} label={acc} t={t}>
+                    <Inp type="number" value={form.balances[acc]} onChange={setBal(acc)} placeholder="Введите баланс..." t={t} mobile={mobile}/>
+                  </F>
+                ))}
+              </div>
+              {Object.values(form.balances).some(v=>v!=="")&&(
+                <div style={{marginTop:4,padding:"12px 14px",borderRadius:9,background:t.accentDim,border:`1px solid ${t.accentBd}`}}>
+                  <div style={{fontSize:11,color:t.accentText,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Итого</div>
+                  <div style={{fontSize:mobile?20:22,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:t.accent}}>
+                    {totalBalance.toLocaleString("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* SAVE */}
+            <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:4}}>
+              {editIdx!==null&&(
+                <button onClick={()=>{setForm(blank());setEditIdx(null);}}
+                  style={{padding:mobile?"14px 16px":"12px 20px",borderRadius:10,background:"transparent",border:`1.5px solid ${t.backBtnBd}`,color:t.backBtnColor,fontWeight:600,fontSize:mobile?15:13,cursor:"pointer",touchAction:"manipulation"}}>
+                  Отмена
+                </button>
+              )}
+              <button onClick={saveEntry} style={nBtn}>
+                {editIdx!==null?"💾 Обновить":"✓ Сохранить"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+    
+    /* Force full-width on large screens */
+    @media (min-width: 1400px) {
+      #root { width: 100% !important; }
+      #root > div { width: 100% !important; }
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+        input[type=number]{-moz-appearance:textfield}
+        ::-webkit-scrollbar{height:5px;width:5px}
+        ::-webkit-scrollbar-track{background:${t.scrollTrack}}
+        ::-webkit-scrollbar-thumb{background:${t.scrollThumb};border-radius:3px}
+        *{box-sizing:border-box}
+        input,textarea,button{-webkit-tap-highlight-color:transparent}
+        textarea::placeholder,input::placeholder{color:${t.textMuted}}
+      `}</style>
+    </div>
+  );
+}
+
+    const root=ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(DailyJournal));
+  </script>
+</body>
+</html>
