@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading Journal</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600;700;800;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1117;--bg2:#161b27;--surface:#1a2035;--surface2:#212840;
+  --border:rgba(255,255,255,.08);--text:#e8eaf0;--text2:#a0a8c0;--text3:#606880;
+  --success:#3ecf8e;--danger:#f05050;--warn:#f0a050;
+  --radius:14px;--radius-sm:8px;--shadow:0 4px 32px rgba(0,0,0,.5);
+  --tr:.2s cubic-bezier(.4,0,.2,1);
+  --c-afinam:#c65454;--c-sfinam:#931c10;--c-abybit:#ff7f27;--c-sbybit:#bd5815;--c-sforex:#a81fb3;
+}
+[data-theme="light"]{
+  --bg:#f0f3fa;--bg2:#e8ecf5;--surface:#fff;--surface2:#f5f7fe;
+  --border:rgba(0,0,0,.08);--text:#1a2035;--text2:#4a5270;--text3:#8892b0;
+  --shadow:0 4px 32px rgba(0,0,0,.1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background var(--tr),color var(--tr)}
+
+/* ── LOGIN ── */
+#login-screen{
+  position:fixed;inset:0;z-index:999;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.login-box{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:40px 36px;width:100%;max-width:380px;text-align:center;
+  box-shadow:var(--shadow);
+}
+.login-logo{
+  font-family:'Urbanist',sans-serif;font-size:28px;font-weight:900;
+  color:#9ca3af;
+  margin-bottom:6px;
+}
+.login-sub{font-size:13px;color:var(--text3);margin-bottom:28px}
+.login-box input[type=password]{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:12px 16px;font-size:15px;color:var(--text);
+  font-family:'DM Sans',sans-serif;outline:none;transition:border-color var(--tr),box-shadow var(--tr);
+  margin-bottom:12px;text-align:center;letter-spacing:4px;
+}
+.login-box input[type=password]:focus{border-color:#4587f3;box-shadow:0 0 0 3px rgba(69,135,243,.2)}
+.login-btn{
+  width:100%;background:linear-gradient(135deg,#4587f3,#00ac47);border:none;
+  color:#fff;font-size:15px;font-weight:700;padding:13px;border-radius:var(--radius-sm);
+  cursor:pointer;font-family:'Urbanist',sans-serif;transition:opacity var(--tr);letter-spacing:.5px;
+}
+.login-btn:hover{opacity:.9}
+.login-err{color:#f05050;font-size:13px;margin-top:10px;min-height:18px}
+
+/* ── HEADER ── */
+.hdr{
+  position:sticky;top:0;z-index:100;background:var(--bg2);
+  border-bottom:1px solid var(--border);backdrop-filter:blur(12px);
+  padding:0 20px;height:60px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.hdr-side{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.hdr-title{
+  font-family:'Urbanist',sans-serif;font-size:22px;font-weight:800;
+  color:#9ca3af;
+  letter-spacing:-.5px;
+}
+.bico{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer;transition:all var(--tr);font-size:16px;text-decoration:none}
+.bico:hover{background:rgba(69,135,243,.12);border-color:#4587f3;color:#4587f3}
+.btxt{display:flex;align-items:center;gap:6px;padding:0 14px;height:36px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:13px;font-weight:600;transition:all var(--tr);text-decoration:none;white-space:nowrap;font-family:'DM Sans',sans-serif}
+.btxt:hover{background:rgba(69,135,243,.12);border-color:#4587f3;color:#4587f3}
+
+/* ── MAIN ── */
+.main{max-width:1440px;margin:0 auto;padding:32px 16px 80px}
+
+/* ── NAV BUTTONS ── */
+.nav-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:16px;
+  max-width:900px;margin:0 auto 40px;
+}
+@media(max-width:600px){.nav-grid{grid-template-columns:1fr;max-width:360px}}
+.nav-btn{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;padding:32px 20px;border-radius:var(--radius);
+  border:1px solid var(--border);background:var(--surface);
+  text-decoration:none;transition:all var(--tr);cursor:pointer;
+  position:relative;overflow:hidden;
+}
+.nav-btn::before{
+  content:'';position:absolute;inset:0;opacity:0;transition:opacity var(--tr);
+}
+.nav-btn:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
+.nav-btn:hover::before{opacity:1}
+.nav-btn.daily::before{background:linear-gradient(135deg,rgba(69,135,243,.12),rgba(69,135,243,.04))}
+.nav-btn.deal::before{background:linear-gradient(135deg,rgba(0,172,71,.12),rgba(0,172,71,.04))}
+.nav-btn.backtest::before{background:linear-gradient(135deg,rgba(147,130,250,.12),rgba(147,130,250,.04))}
+.nav-btn:hover .nav-icon{transform:scale(1.1)}
+.nav-icon{font-size:42px;transition:transform var(--tr);z-index:1}
+.nav-label{font-family:'Urbanist',sans-serif;font-size:22px;font-weight:800;z-index:1}
+.nav-sub{font-size:12px;color:var(--text3);z-index:1}
+.nav-btn.daily .nav-label{color:#4587f3}
+.nav-btn.deal .nav-label{color:#00ac47}
+.nav-btn.backtest .nav-label{color:#9382fa}
+
+/* ── SECTION ── */
+.sec-title{
+  font-family:'Urbanist',sans-serif;font-size:14px;font-weight:700;
+  color:var(--text2);text-transform:uppercase;letter-spacing:1.2px;
+  margin-bottom:14px;display:flex;align-items:center;gap:10px;
+}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── PERIOD SWITCHER ── */
+.period-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.period-btn{
+  padding:5px 12px;border-radius:100px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text3);font-size:12px;font-weight:600;
+  cursor:pointer;transition:all var(--tr);font-family:'DM Sans',sans-serif;
+}
+.period-btn:hover{border-color:#4587f3;color:#4587f3}
+.period-btn.active{background:rgba(69,135,243,.15);border-color:#4587f3;color:#4587f3}
+
+/* ── CHARTS GRID ── */
+.charts-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;
+  margin-bottom:40px;
+}
+@media(max-width:480px){.charts-grid{grid-template-columns:1fr}}
+.chart-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;
+}
+.chart-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.chart-name{font-family:'Urbanist',sans-serif;font-size:14px;font-weight:700}
+.chart-balance{font-family:'Urbanist',sans-serif;font-size:18px;font-weight:800}
+.chart-change{font-size:12px;font-weight:600;margin-left:6px}
+.chart-change.pos{color:var(--success)}.chart-change.neg{color:var(--danger)}
+.chart-canvas-wrap{position:relative;height:120px}
+canvas.line-chart{width:100%;height:100%}
+.no-data{color:var(--text3);font-size:13px;text-align:center;padding:30px 0}
+
+/* ── ANALYTICS PANEL ── */
+#alog{display:none;position:fixed;inset:0;z-index:150;background:var(--bg);overflow-y:auto}
+#alog.open{display:block}
+.ahdr{
+  position:sticky;top:0;z-index:10;background:var(--bg2);
+  border-bottom:1px solid var(--border);padding:0 20px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.atit{
+  font-family:'Urbanist',sans-serif;font-size:20px;font-weight:800;text-align:center;flex:1;
+  color:#9ca3af;
+}
+.abdy{max-width:1440px;margin:0 auto;padding:24px 16px 60px}
+
+/* STAT CARDS */
+.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:800px){.sgrid{grid-template-columns:1fr 1fr}}
+.scard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center}
+.slbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.sval{font-family:'Urbanist',sans-serif;font-size:24px;font-weight:800;color:var(--text)}
+.sval.pos{color:var(--success)}.sval.neg{color:var(--danger)}.sval.acc{color:#4587f3}
+
+/* DONUT / RADAR same as other forms */
+.cwrp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.ctit{font-family:'Urbanist',sans-serif;font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px}
+.bcht{display:flex;align-items:flex-end;gap:4px;height:80px}
+.bar{flex:1;border-radius:4px 4px 0 0;min-height:4px;transition:opacity .2s;cursor:pointer;position:relative}
+.bar:hover{opacity:.8}
+.blbl{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--text3);white-space:nowrap}
+
+/* Daily pie charts */
+.pie-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+.pie-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;align-items:center}
+.pie-title{font-family:'Urbanist',sans-serif;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;text-align:center}
+.pie-canvas{max-width:160px;width:100%}
+.pie-legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
+.pie-leg-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text2)}
+.pie-leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);background:#4587f3;color:#fff;padding:9px 20px;border-radius:100px;font-size:13px;font-weight:600;z-index:400;transition:transform .3s cubic-bezier(.4,0,.2,1);pointer-events:none;white-space:nowrap;font-family:'Urbanist',sans-serif}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.err{background:var(--danger)}
+
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+@media(max-width:480px){.btxt span{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">Trading Journal</div>
+    <div class="login-sub">Введите пароль для доступа</div>
+    <input type="password" id="pwd-inp" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPwd()">
+    <button class="login-btn" onclick="checkPwd()">Войти</button>
+    <div class="login-err" id="pwd-err"></div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app" style="display:none">
+
+<header class="hdr">
+  <div class="hdr-side">
+    <button class="bico" onclick="toggleTheme()" id="tbtn" title="Тема">🌙</button>
+    <a href="https://docs.google.com/spreadsheets/d/1pTmXMWpOHhNMcFS71umrTqz3HIzhm7l_TpE3utKHr9k/edit" target="_blank" class="bico" title="Google Таблица">
+      <svg width="18" height="18" viewBox="0 0 64 64"><rect width="64" height="64" rx="8" fill="#0f9d58"/><rect x="17" y="19" width="30" height="5" rx="1.5" fill="white"/><rect x="17" y="28" width="30" height="5" rx="1.5" fill="white" opacity=".75"/><rect x="17" y="37" width="30" height="5" rx="1.5" fill="white" opacity=".55"/><rect x="17" y="46" width="18" height="4" rx="1.5" fill="white" opacity=".4"/><line x1="32" y1="19" x2="32" y2="50" stroke="#0f9d58" stroke-width="2.5"/></svg>
+    </a>
+  </div>
+  <div class="hdr-title">Trading Journal</div>
+  <div class="hdr-side">
+    <button class="btxt" onclick="openA()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      <span>Analytics</span>
+    </button>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- NAV BUTTONS -->
+  <div class="nav-grid">
+    <a href="daily.html" class="nav-btn daily">
+      <span class="nav-icon">📅</span>
+      <span class="nav-label">Daily</span>
+      <span class="nav-sub">Ежедневный чек-лист</span>
+    </a>
+    <a href="deal.html" class="nav-btn deal">
+      <span class="nav-icon">📈</span>
+      <span class="nav-label">Deal</span>
+      <span class="nav-sub">Журнал сделок</span>
+    </a>
+    <a href="backtest.html" class="nav-btn backtest">
+      <span class="nav-icon">🔬</span>
+      <span class="nav-label">Backtest</span>
+      <span class="nav-sub">Журнал бэктестов</span>
+    </a>
+  </div>
+
+  <!-- ACCOUNT CHARTS -->
+  <div class="sec-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+    Балансы счетов
+  </div>
+
+  <div class="period-row">
+    <button class="period-btn active" onclick="setPeriod(7,this)">7 дней</button>
+    <button class="period-btn" onclick="setPeriod(30,this)">1 месяц</button>
+    <button class="period-btn" onclick="setPeriod(90,this)">3 месяца</button>
+    <button class="period-btn" onclick="setPeriod(365,this)">1 год</button>
+    <button class="period-btn" onclick="setPeriod(0,this)">Всё время</button>
+  </div>
+
+  <div class="charts-grid" id="charts-grid"></div>
+
+</main>
+</div><!-- /app -->
+
+<!-- ═══ ANALYTICS PANEL ═══ -->
+<div id="alog">
+  <div class="ahdr">
+    <div style="display:flex;gap:8px">
+      <button class="bico" onclick="toggleTheme()" id="atbtn" title="Тема">🌙</button>
+      <a href="https://docs.google.com/spreadsheets/d/1pTmXMWpOHhNMcFS71umrTqz3HIzhm7l_TpE3utKHr9k/edit" target="_blank" class="bico" title="Google Таблица">
+        <svg width="17" height="17" viewBox="0 0 64 64"><rect width="64" height="64" rx="8" fill="#0f9d58"/><rect x="17" y="19" width="30" height="5" rx="1.5" fill="white"/><rect x="17" y="28" width="30" height="5" rx="1.5" fill="white" opacity=".75"/><rect x="17" y="37" width="30" height="5" rx="1.5" fill="white" opacity=".55"/><rect x="17" y="46" width="18" height="4" rx="1.5" fill="white" opacity=".4"/><line x1="32" y1="19" x2="32" y2="50" stroke="#0f9d58" stroke-width="2.5"/></svg>
+      </a>
+    </div>
+    <div class="atit">Analytics</div>
+    <div style="display:flex;gap:8px">
+      <button class="btxt" onclick="closeA()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M5 12l7-7M5 12l7 7"/></svg>
+        <span>Главная</span>
+      </button>
+    </div>
+  </div>
+  <div class="abdy">
+
+    <!-- DAILY SUMMARY -->
+    <div class="sec-title">📅 Daily — Сводная статистика</div>
+    <div class="sgrid" id="daily-stats"></div>
+    <div class="pie-grid" id="daily-pies"></div>
+
+    <!-- DEALS SUMMARY -->
+    <div class="sec-title" style="margin-top:8px">📈 Deal — Торговая статистика</div>
+    <div class="sgrid" id="deal-stats"></div>
+
+    <div style="margin-bottom:10px">
+      <div style="font-family:'Urbanist',sans-serif;font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:8px">Performance by side</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="cwrp" style="display:flex;flex-direction:column;align-items:center">
+          <div class="ctit" style="width:100%">Total Trades</div>
+          <canvas id="d-trades" width="200" height="200" style="max-width:200px"></canvas>
+          <div style="display:flex;gap:12px;margin-top:8px" id="lg-trades"></div>
+        </div>
+        <div class="cwrp" style="display:flex;flex-direction:column;align-items:center">
+          <div class="ctit" style="width:100%">Win Rate</div>
+          <canvas id="d-wr" width="200" height="200" style="max-width:200px"></canvas>
+          <div style="display:flex;gap:12px;margin-top:8px" id="lg-wr"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:10px">
+      <div style="font-family:'Urbanist',sans-serif;font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px">Performance by session</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px">
+        <div class="cwrp" style="display:flex;flex-direction:column;align-items:center"><div class="ctit" style="width:100%">Win Rate</div><canvas id="r-wr" width="200" height="200" style="max-width:200px"></canvas></div>
+        <div class="cwrp" style="display:flex;flex-direction:column;align-items:center"><div class="ctit" style="width:100%">Total Trades</div><canvas id="r-tot" width="200" height="200" style="max-width:200px"></canvas></div>
+        <div class="cwrp" style="display:flex;flex-direction:column;align-items:center"><div class="ctit" style="width:100%">Avg RR</div><canvas id="r-rr" width="200" height="200" style="max-width:200px"></canvas></div>
+        <div class="cwrp" style="display:flex;flex-direction:column;align-items:center"><div class="ctit" style="width:100%">Profit (R)</div><canvas id="r-pf" width="200" height="200" style="max-width:200px"></canvas></div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div style="font-family:'Urbanist',sans-serif;font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px">Performance by time &amp; day</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="cwrp"><div class="ctit">По дням недели</div><div style="padding-bottom:22px"><div class="bcht" id="ch-days"></div></div></div>
+        <div class="cwrp"><div class="ctit">По времени входа</div><div style="padding-bottom:22px"><div class="bcht" id="ch-time"></div></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── CONFIG ───
+const PWD_HASH = '4913d9b91b263d8112306b784e7aa1f722bc5ca5bab56c231d52f9979d260402';
+const TK = 'tj_theme';
+const DAILY_SK = 'daily_records';
+const DEAL_SK = 'deal_recs';
+const GAS = ''; // Google Apps Script URL
+
+// ─── PASSWORD ───
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function checkPwd(){
+  const val=document.getElementById('pwd-inp').value;
+  const hash=await sha256(val);
+  if(hash===PWD_HASH){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='block';
+    sessionStorage.setItem('tj_auth','1');
+    initApp();
+  } else {
+    document.getElementById('pwd-err').textContent='Неверный пароль';
+    document.getElementById('pwd-inp').value='';
+    setTimeout(()=>document.getElementById('pwd-err').textContent='',2500);
+  }
+}
+// Auto-login if already authenticated this session
+if(sessionStorage.getItem('tj_auth')==='1'){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.addEventListener('DOMContentLoaded',initApp);
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const t=localStorage.getItem(TK)||'dark';
+  document.documentElement.setAttribute('data-theme',t);
+  setTBtn(t);
+  if(sessionStorage.getItem('tj_auth')==='1')initApp();
+});
+
+// ─── THEME ───
+function toggleTheme(){
+  const c=document.documentElement.getAttribute('data-theme'),nx=c==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',nx);localStorage.setItem(TK,nx);setTBtn(nx);
+  // Redraw all canvases after theme change
+  setTimeout(()=>{drawAllCharts();if(document.getElementById('alog').classList.contains('open'))renderA();},50);
+}
+function setTBtn(t){const i=t==='dark'?'☀️':'🌙';['tbtn','atbtn'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=i});}
+
+// ─── INIT ───
+let currentPeriod=7;
+function initApp(){
+  drawAllCharts();
+}
+
+// ─── PERIOD ───
+function setPeriod(days,btn){
+  currentPeriod=days;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  drawAllCharts();
+}
+
+// ─── ACCOUNT COLORS ───
+const ACC_COLORS={
+  'А Финам':'#c65454','С Финам':'#931c10',
+  'A Bybit':'#ff7f27','C Bybit':'#bd5815',
+  'А Bybit':'#ff7f27','С Bybit':'#bd5815',
+  'С Форекс':'#a81fb3'
+};
+const FALLBACK_COLORS=['#4587f3','#3ecf8e','#f0a050','#f05050','#9382fa','#00ac47'];
+
+// ─── PARSE DAILY DATA ───
+function getDailyRecords(){
+  try{return JSON.parse(localStorage.getItem(DAILY_SK)||'[]').filter(r=>r.type==='daily');}
+  catch(e){return[];}
+}
+
+function getAccountHistory(accName,days){
+  const all=getDailyRecords();
+  const now=Date.now();
+  const filtered=days===0?all:all.filter(r=>{
+    if(!r.ts)return false;
+    return (now-new Date(r.ts).getTime())<=days*86400000;
+  });
+  return filtered.map(r=>{
+    const val=r.aFinam&&accName==='А Финам'?r.aFinam:
+              r.sFinam&&accName==='С Финам'?r.sFinam:
+              r.aBybit&&accName==='A Bybit'?r.aBybit:
+              r.sBybit&&accName==='C Bybit'?r.sBybit:
+              r.sforex&&accName==='С Форекс'?r.sforex:
+              r.xe&&r.xe[accName]?r.xe[accName]:null;
+    return val!==null&&val!==''?{date:r.datetime||r.ts,val:parseFloat(val)}:null;
+  }).filter(Boolean);
+}
+
+function getAllAccountNames(){
+  const recs=getDailyRecords();
+  const names=new Set(['А Финам','С Финам','A Bybit','C Bybit','С Форекс']);
+  recs.forEach(r=>{if(r.xe)Object.keys(r.xe).forEach(k=>{if(r.xe[k])names.add(k);});});
+  return [...names];
+}
+
+// ─── DRAW ALL LINE CHARTS ───
+function drawAllCharts(){
+  const grid=document.getElementById('charts-grid');
+  grid.innerHTML='';
+  const names=getAllAccountNames();
+  const currency={
+    'А Финам':'₽','С Финам':'₽',
+    'A Bybit':'USDT','C Bybit':'USDT',
+    'А Bybit':'USDT','С Bybit':'USDT',
+    'С Форекс':'₽'
+  };
+  names.forEach((name,idx)=>{
+    const data=getAccountHistory(name,currentPeriod);
+    const color=ACC_COLORS[name]||FALLBACK_COLORS[idx%FALLBACK_COLORS.length];
+    const cur=currency[name]||'';
+    const card=document.createElement('div');
+    card.className='chart-card';
+    const lastVal=data.length?data[data.length-1].val:null;
+    const firstVal=data.length?data[0].val:null;
+    const change=lastVal&&firstVal&&firstVal!==0?((lastVal-firstVal)/Math.abs(firstVal)*100):0;
+    const changeCls=change>=0?'pos':'neg';
+    const changeStr=(change>=0?'+':'')+change.toFixed(1)+'%';
+    card.innerHTML=`
+      <div class="chart-card-hdr">
+        <div>
+          <div class="chart-name" style="color:${color}">${name}</div>
+          <div style="font-size:11px;color:var(--text3)">${cur}</div>
+        </div>
+        <div style="text-align:right">
+          <span class="chart-balance" style="color:${color}">${lastVal?lastVal.toLocaleString():'—'}</span>
+          ${data.length>1?`<span class="chart-change ${changeCls}">${changeStr}</span>`:''}
+        </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        ${data.length<2?`<div class="no-data">Нет данных за период</div>`:`<canvas id="cv-${idx}" class="line-chart"></canvas>`}
+      </div>`;
+    grid.appendChild(card);
+    if(data.length>=2){
+      requestAnimationFrame(()=>drawLineChart(`cv-${idx}`,data,color));
+    }
+  });
+}
+
+function drawLineChart(canvasId,data,color){
+  const canvas=document.getElementById(canvasId);if(!canvas)return;
+  const isDark=document.documentElement.getAttribute('data-theme')!=='light';
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.parentElement.clientWidth||400;
+  const H=120;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+  const vals=data.map(d=>d.val);
+  const min=Math.min(...vals),max=Math.max(...vals);
+  const range=max-min||1;
+  const pad=16;
+  const xs=data.map((_,i)=>pad+(W-pad*2)*i/(data.length-1));
+  const ys=vals.map(v=>H-pad-(v-min)/range*(H-pad*2));
+  // Gradient fill
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,color+'55');
+  grad.addColorStop(1,color+'00');
+  ctx.beginPath();
+  ctx.moveTo(xs[0],H);xs.forEach((x,i)=>ctx.lineTo(x,ys[i]));ctx.lineTo(xs[xs.length-1],H);
+  ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  // Line
+  ctx.beginPath();ctx.moveTo(xs[0],ys[0]);
+  xs.forEach((x,i)=>{if(i>0){const px=xs[i-1],py=ys[i-1],cx1=(px+x)/2;ctx.bezierCurveTo(cx1,py,cx1,ys[i],x,ys[i]);}});
+  ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.stroke();
+  // Dot at last point
+  const lx=xs[xs.length-1],ly=ys[ys.length-1];
+  ctx.beginPath();ctx.arc(lx,ly,4,0,Math.PI*2);
+  ctx.fillStyle=color;ctx.fill();
+  ctx.beginPath();ctx.arc(lx,ly,7,0,Math.PI*2);
+  ctx.strokeStyle=color+'44';ctx.lineWidth=3;ctx.stroke();
+}
+
+// ─── ANALYTICS ───
+function openA(){document.getElementById('alog').classList.add('open');renderA();}
+function closeA(){document.getElementById('alog').classList.remove('open');}
+
+function renderA(){
+  renderDailyStats();
+  renderDealStats();
+}
+
+// ── Daily stats ──
+function renderDailyStats(){
+  const recs=getDailyRecords();
+  const dEl=document.getElementById('daily-stats');
+  const sleepAvg=recs.filter(r=>r.sleep).length?
+    (recs.filter(r=>r.sleep).reduce((s,r)=>s+parseInt(r.sleep),0)/recs.filter(r=>r.sleep).length).toFixed(1):0;
+  const actYes=recs.filter(r=>r.act==='Да').length;
+  const planYes=recs.filter(r=>r.plan==='Да').length;
+  dEl.innerHTML=`
+    <div class="scard"><div class="slbl">Всего записей</div><div class="sval acc">${recs.length}</div></div>
+    <div class="scard"><div class="slbl">Сред. качество сна</div><div class="sval">${sleepAvg} / 5</div></div>
+    <div class="scard"><div class="slbl">Дней с активностью</div><div class="sval pos">${actYes}</div></div>
+    <div class="scard"><div class="slbl">Дней с планом</div><div class="sval acc">${planYes}</div></div>`;
+  // Pie charts
+  renderDailyPies(recs);
+}
+
+function renderDailyPies(recs){
+  const pEl=document.getElementById('daily-pies');pEl.innerHTML='';
+  const PIE_DEFS=[
+    {title:'Качество сна',fn:r=>r.sleep?r.sleep+' зв.':null,colors:['#f05050','#f05050','#f0a050','#f0a050','#3ecf8e','#3ecf8e']},
+    {title:'Настроение',fn:r=>r.mood||null,colors:['#3ecf8e','#4587f3','#f0a050','#f0a050','#f05050','#9382fa','#c65454']},
+    {title:'Самочувствие',fn:r=>r.feel||null,colors:['#3ecf8e','#f05050']},
+    {title:'Активность',fn:r=>r.act||null,colors:['#3ecf8e','#f05050']},
+  ];
+  PIE_DEFS.forEach((def,di)=>{
+    const map={};
+    recs.forEach(r=>{const k=def.fn(r);if(k)map[k]=(map[k]||0)+1;});
+    const entries=Object.entries(map);
+    if(!entries.length)return;
+    const card=document.createElement('div');card.className='pie-card';
+    card.innerHTML=`<div class="pie-title">${def.title}</div><canvas id="pie-${di}" class="pie-canvas" width="160" height="160"></canvas><div class="pie-legend" id="pie-leg-${di}"></div>`;
+    pEl.appendChild(card);
+    requestAnimationFrame(()=>{
+      drawPie(`pie-${di}`,entries,def.colors,`pie-leg-${di}`);
+    });
+  });
+}
+
+function drawPie(canvasId,entries,colors,legId){
+  const canvas=document.getElementById(canvasId);if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2,r=70,inner=42;
+  const isDark=document.documentElement.getAttribute('data-theme')!=='light';
+  ctx.clearRect(0,0,W,H);
+  const total=entries.reduce((s,[,v])=>s+v,0);
+  let start=-Math.PI/2;
+  entries.forEach(([k,v],i)=>{
+    const angle=(v/total)*Math.PI*2,col=colors[i]||FALLBACK_COLORS[i%FALLBACK_COLORS.length];
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,start+angle);ctx.closePath();ctx.fillStyle=col;ctx.fill();
+    const mid=start+angle/2,pct=Math.round(v/total*100);
+    if(pct>7){ctx.fillStyle='#fff';ctx.font='bold 11px Urbanist,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(pct+'%',cx+Math.cos(mid)*r*.72,cy+Math.sin(mid)*r*.72);}
+    start+=angle;
+  });
+  ctx.beginPath();ctx.arc(cx,cy,inner,0,Math.PI*2);ctx.fillStyle=isDark?'#1a2035':'#ffffff';ctx.fill();
+  const lg=document.getElementById(legId);
+  if(lg)lg.innerHTML=entries.map(([k,v],i)=>`<div class="pie-leg-item"><div class="pie-leg-dot" style="background:${colors[i]||FALLBACK_COLORS[i%FALLBACK_COLORS.length]}"></div>${k} (${v})</div>`).join('');
+}
+
+// ── Deal stats ──
+function getDealRecs(){try{return JSON.parse(localStorage.getItem(DEAL_SK)||'[]');}catch(e){return[];}}
+function renderDealStats(){
+  const recs=getDealRecs();
+  const full=recs.filter(r=>r.type==='full');
+  const wins=full.filter(r=>(r.result||'').includes('Тейк')).length;
+  const losses=full.filter(r=>(r.result||'').includes('Стоп')).length;
+  const wr=full.length?Math.round(wins/full.length*100):0;
+  const rrV=recs.map(r=>{const m=(r.rr||'').match(/1\s*:\s*([\d.]+)/);return m?parseFloat(m[1]):null;}).filter(Boolean);
+  const avgRR=rrV.length?(rrV.reduce((a,b)=>a+b,0)/rrV.length).toFixed(2):0;
+  const longs=recs.filter(r=>r.dir==='Long').length;
+  const shorts=recs.filter(r=>r.dir==='Short').length;
+  const pnlV=full.map(r=>parseFloat((r.pnl||'').replace(' R',''))).filter(v=>!isNaN(v));
+  const totPnl=pnlV.reduce((a,b)=>a+b,0).toFixed(2);
+  const el=document.getElementById('deal-stats');
+  el.innerHTML=`
+    <div class="scard"><div class="slbl">Total Trades</div><div class="sval acc">${recs.length}</div></div>
+    <div class="scard"><div class="slbl">Win Rate</div><div class="sval pos">${wr}%</div></div>
+    <div class="scard"><div class="slbl">Avg Risk Reward</div><div class="sval acc">${avgRR}</div></div>
+    <div class="scard"><div class="slbl">Winners / Losers</div><div class="sval"><span style="color:var(--success)">${wins}</span> / <span style="color:var(--danger)">${losses}</span></div></div>
+    <div class="scard"><div class="slbl">Long</div><div class="sval pos">${longs}</div></div>
+    <div class="scard"><div class="slbl">Short</div><div class="sval neg">${shorts}</div></div>
+    <div class="scard"><div class="slbl">Total PnL (R)</div><div class="sval ${parseFloat(totPnl)>0?'pos':parseFloat(totPnl)<0?'neg':''}">${parseFloat(totPnl)>=0?'+':''}${totPnl}</div></div>
+    <div class="scard"><div class="slbl">Сделок с записями</div><div class="sval acc">${full.length}</div></div>`;
+  // Charts
+  const buys=longs,sells=shorts;
+  const lRecs=recs.filter(r=>r.dir==='Long'),sRecs=recs.filter(r=>r.dir==='Short');
+  const lWr=lRecs.length?Math.round(lRecs.filter(r=>(r.result||'').includes('Тейк')).length/lRecs.length*100):0;
+  const sWr=sRecs.length?Math.round(sRecs.filter(r=>(r.result||'').includes('Тейк')).length/sRecs.length*100):0;
+  drawDonut('d-trades',[buys,sells],['#00ac47','#4587f3'],['buy','sell'],'trades');
+  drawDonut('d-wr',[lWr,sWr],['#00ac47','#4587f3'],['buy','sell'],'wr');
+  const SESS=['Азия','Россия','Лондон','США'];
+  const sm={},swm={},srrm={},spm={};
+  SESS.forEach(s=>{sm[s]=0;swm[s]=0;srrm[s]=0;spm[s]=0;});
+  recs.forEach(r=>{
+    const sk=SESS.find(s=>(r.sess||'').includes(s));if(!sk)return;
+    sm[sk]++;if((r.result||'').includes('Тейк'))swm[sk]++;
+    const m=(r.rr||'').match(/1\s*:\s*([\d.]+)/);if(m)srrm[sk]+=parseFloat(m[1]);
+    const p=parseFloat((r.pnl||'').replace(' R',''));if(!isNaN(p))spm[sk]+=p;
+  });
+  const swPct={};SESS.forEach(s=>swPct[s]=sm[s]?Math.round(swm[s]/sm[s]*100):0);
+  drawRadar('r-wr',swPct);drawRadar('r-tot',sm);drawRadar('r-rr',srrm);drawRadar('r-pf',spm);
+  renderBC('ch-days',countK(recs,r=>r.entryDay?.slice(0,2)));
+  renderBC('ch-time',countK(recs,r=>{const d=r.entryDt;return d?new Date(d).getHours()+'h':null;}));
+}
+
+function countK(recs,fn){const m={};recs.forEach(r=>{const k=fn(r);if(k)m[k]=(m[k]||0)+1;});return Object.entries(m).map(([k,v])=>({label:k,val:v}));}
+function renderBC(id,data){
+  const el=document.getElementById(id);if(!el)return;el.innerHTML='';if(!data.length)return;
+  const max=Math.max(...data.map(d=>d.val),1);
+  data.forEach(d=>{const b=document.createElement('div');b.className='bar';b.style.height=`${Math.max(d.val/max*100,4)}%`;b.style.background='#4587f3';b.style.opacity=d.val?'.8':'.2';b.title=`${d.label}: ${d.val}`;b.innerHTML=`<span class="blbl">${d.label}</span>`;el.appendChild(b);});
+}
+
+function drawDonut(canvasId,values,colors,labels,lgSuffix){
+  const canvas=document.getElementById(canvasId);if(!canvas)return;
+  const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const isDark=document.documentElement.getAttribute('data-theme')!=='light';
+  const bgHole=isDark?'#1a2035':'#ffffff';
+  const total=values.reduce((a,b)=>a+b,0);
+  if(!total){
+    ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle='#b0b0b0';ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(W/2,H/2,58,0,Math.PI*2);ctx.stroke();ctx.restore();
+    ctx.fillStyle='#b0b0b0';ctx.font='12px DM Sans,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Нет данных',W/2,H/2);
+    return;
+  }
+  let start=-Math.PI/2;const cx=W/2,cy=H/2,r=70,inner=46;
+  values.forEach((v,i)=>{
+    const angle=(v/total)*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,start+angle);ctx.closePath();ctx.fillStyle=colors[i];ctx.fill();
+    if(v>0){const mid=start+angle/2,tx=cx+Math.cos(mid)*r*.72,ty=cy+Math.sin(mid)*r*.72,pct=Math.round(v/total*100);if(pct>5){ctx.fillStyle='#fff';ctx.font='bold 12px Urbanist,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(pct+'%',tx,ty);}}
+    start+=angle;
+  });
+  ctx.beginPath();ctx.arc(cx,cy,inner,0,Math.PI*2);ctx.fillStyle=bgHole;ctx.fill();
+  const lgEl=document.getElementById('lg-'+lgSuffix);
+  if(lgEl)lgEl.innerHTML=labels.map((l,i)=>`<span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2)"><span style="width:10px;height:10px;border-radius:50%;background:${colors[i]};display:inline-block"></span>${l}</span>`).join('');
+}
+
+function drawRadar(canvasId,dataBySession){
+  const canvas=document.getElementById(canvasId);if(!canvas)return;
+  const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const sessions=['Азия','Россия','Лондон','США'],n=sessions.length;
+  const cx=W/2,cy=H/2+10,r=65;
+  const angles=sessions.map((_,i)=>(-Math.PI/2)+(2*Math.PI/n)*i);
+  const vals=sessions.map(s=>dataBySession[s]||0),maxV=Math.max(...vals,1);
+  for(let ring=1;ring<=4;ring++){const fr=r*(ring/4);ctx.beginPath();angles.forEach((a,i)=>{const x=cx+Math.cos(a)*fr,y=cy+Math.sin(a)*fr;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.closePath();ctx.strokeStyle='#b0b0b0';ctx.lineWidth=1;ctx.stroke();}
+  angles.forEach(a=>{ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);ctx.strokeStyle='#b0b0b0';ctx.lineWidth=1.5;ctx.stroke();});
+  ctx.fillStyle='#b0b0b0';ctx.font='bold 10px DM Sans,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  angles.forEach((a,i)=>{ctx.fillText(sessions[i],cx+Math.cos(a)*(r+14),cy+Math.sin(a)*(r+14));});
+  ctx.beginPath();angles.forEach((a,i)=>{const fr=r*(vals[i]/maxV),x=cx+Math.cos(a)*fr,y=cy+Math.sin(a)*fr;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.closePath();
+  ctx.fillStyle='rgba(69,135,243,.25)';ctx.fill();ctx.strokeStyle='#4587f3';ctx.lineWidth=2.5;ctx.stroke();
+  angles.forEach((a,i)=>{const fr=r*(vals[i]/maxV),x=cx+Math.cos(a)*fr,y=cy+Math.sin(a)*fr;ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle='#4587f3';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();});
+}
+
+let _tt;
+function toast(msg,type=''){const t=document.getElementById('toast');t.textContent=msg;t.className='show'+(type?' '+type:'');clearTimeout(_tt);_tt=setTimeout(()=>t.className='',3000);}
+</script>
+
+<script src="config.js"></script>
+</body>
+</html>
