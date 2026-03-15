@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily — Ежедневный чек-лист</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent: #4587f3;
+    --accent-hover: #2d6de0;
+    --accent-light: rgba(69,135,243,0.12);
+    --accent-glow: rgba(69,135,243,0.25);
+    --bg: #0f1117;
+    --bg2: #161b27;
+    --surface: #1a2035;
+    --surface2: #212840;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaf0;
+    --text2: #a0a8c0;
+    --text3: #606880;
+    --success: #3ecf8e;
+    --danger: #f05050;
+    --warn: #f0a050;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --tr: 0.2s cubic-bezier(0.4,0,0.2,1);
+  }
+  [data-theme="light"] {
+    --bg: #f0f3fa; --bg2: #e8ecf5; --surface: #ffffff; --surface2: #f5f7fe;
+    --border: rgba(0,0,0,0.08); --text: #1a2035; --text2: #4a5270; --text3: #8892b0;
+    --shadow: 0 4px 24px rgba(69,135,243,0.08);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background var(--tr),color var(--tr)}
+
+  /* HEADER */
+  .hdr{position:sticky;top:0;z-index:100;background:var(--bg2);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);padding:0 14px;height:56px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .hdr-side{display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .hdr-c{text-align:center;flex:1;min-width:0}
+  .hdr-title{font-family:'Urbanist',sans-serif;font-size:26px;font-weight:800;color:#4587f3;letter-spacing:-0.5px;line-height:1}
+  .hdr-sub{font-size:11px;color:#fff;font-weight:400;letter-spacing:.4px;margin-top:1px;opacity:.85}
+  [data-theme="light"] .hdr-sub{color:var(--text2);opacity:1}
+
+  .bico{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer;transition:all var(--tr);font-size:15px;text-decoration:none;flex-shrink:0}
+  .bico:hover{background:var(--accent-light);border-color:var(--accent);color:var(--accent)}
+  .btxt{display:flex;align-items:center;gap:5px;padding:0 10px;height:34px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:12px;font-weight:500;transition:all var(--tr);text-decoration:none;white-space:nowrap;font-family:'DM Sans',sans-serif}
+  .btxt:hover{background:var(--accent-light);border-color:var(--accent);color:var(--accent)}
+
+  /* MAIN */
+  .main{max-width:1440px;margin:0 auto;padding:14px 10px 80px}
+
+  /* SECTION */
+  .sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;transition:background var(--tr)}
+  .stitle{font-family:'Urbanist',sans-serif;font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+  .stitle::after{content:'';flex:1;height:1px;background:var(--border)}
+
+  /* GRIDS */
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:900px){.g4{grid-template-columns:1fr 1fr}}
+  @media(max-width:600px){.g2,.g3,.g4{grid-template-columns:1fr 1fr}}
+  @media(max-width:380px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+  /* FIELDS */
+  .fld{display:flex;flex-direction:column;gap:5px}
+  .flbl{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;text-transform:uppercase}
+  .fval{font-size:14px;font-weight:600;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;min-height:38px;display:flex;align-items:center}
+  input[type=text],input[type=number],textarea,select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;color:var(--text);font-family:'DM Sans',sans-serif;width:100%;transition:border-color var(--tr),box-shadow var(--tr);outline:none;-webkit-appearance:none;appearance:none}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+  textarea{resize:vertical;min-height:60px}
+  select{cursor:pointer}
+  select option{background:var(--bg2)}
+  ::placeholder{color:var(--text3)}
+
+  /* RADIO */
+  .rgrp{display:flex;gap:6px;flex-wrap:wrap}
+  .rbtn{position:relative}
+  .rbtn input{position:absolute;opacity:0;width:0;height:0}
+  .rbtn label{display:flex;align-items:center;justify-content:center;padding:7px 14px;border-radius:var(--radius-sm);background:var(--surface2);border:1px solid var(--border);font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;transition:all var(--tr);white-space:nowrap}
+  .rbtn input:checked+label{background:var(--accent-light);border-color:var(--accent);color:var(--accent);font-weight:600}
+  .rbtn label:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* NEWS */
+  .news-list{display:flex;flex-direction:column;gap:5px}
+  .nrow{display:flex;align-items:center;gap:9px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:13px}
+  .ntime{font-family:'Urbanist',sans-serif;font-size:12px;font-weight:700;color:var(--accent);min-width:46px}
+  .nname{flex:1;color:var(--text);font-weight:500}
+  .nimp{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .nimp.high{background:var(--danger);box-shadow:0 0 6px var(--danger)}
+  .nimp.med{background:var(--warn)}
+  .nprev{font-size:11px;color:var(--text3);white-space:nowrap}
+  .spin{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* PnL */
+  .pnlcard{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .pitm{text-align:center}
+  .plbl{font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+  .pval{font-size:15px;font-weight:700;font-family:'Urbanist',sans-serif}
+  .pval.pos{color:var(--success)} .pval.neg{color:var(--danger)} .pval.neu{color:var(--text2)}
+
+  /* ACCOUNTS */
+  .acrd{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;display:flex;flex-direction:column;gap:5px}
+  .ahdr{display:flex;align-items:center;justify-content:space-between;gap:5px}
+  .aname{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+  .acur{font-size:10px;color:var(--text3)}
+  .ainp{font-size:16px!important;font-weight:700!important;font-family:'Urbanist',sans-serif!important;padding:5px 8px!important}
+
+  /* BTNS */
+  .brow{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .bpri{flex:1;min-width:120px;background:var(--accent);border:none;color:#fff;font-size:15px;font-weight:700;padding:12px 20px;border-radius:var(--radius-sm);cursor:pointer;font-family:'Urbanist',sans-serif;transition:all var(--tr)}
+  .bpri:hover{background:var(--accent-hover);transform:translateY(-1px);box-shadow:0 6px 20px var(--accent-glow)}
+  .bsec{flex:1;min-width:100px;background:transparent;border:1px solid var(--border);color:var(--text2);font-size:15px;font-weight:600;padding:12px 20px;border-radius:var(--radius-sm);cursor:pointer;font-family:'Urbanist',sans-serif;transition:all var(--tr)}
+  .bsec:hover{border-color:var(--danger);color:var(--danger)}
+  .bsm{padding:5px 10px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:500;cursor:pointer;transition:all var(--tr);font-family:'DM Sans',sans-serif;white-space:nowrap}
+  .bsm:hover{border-color:var(--accent);color:var(--accent)}
+  .bsm.acc{background:var(--accent-light);border-color:var(--accent);color:var(--accent)}
+
+  /* MODAL */
+  .movl{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px}
+  .movl.open{display:flex}
+  .mdl{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;width:100%;max-width:380px;box-shadow:var(--shadow)}
+  .mtit{font-family:'Urbanist',sans-serif;font-size:17px;font-weight:700;margin-bottom:12px;color:var(--text)}
+  .mflds{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+  .mbtns{display:flex;gap:8px}
+
+  /* DIARY */
+  #dlog{display:none;position:fixed;inset:0;z-index:150;background:var(--bg);overflow-y:auto}
+  #dlog.open{display:block}
+  .dhdr{position:sticky;top:0;z-index:10;background:var(--bg2);border-bottom:1px solid var(--border);padding:0 14px;height:56px;display:flex;align-items:center;justify-content:space-between}
+  .dtit{font-family:'Urbanist',sans-serif;font-size:18px;font-weight:800;color:#4587f3;text-align:center;flex:1}
+  .dbdy{max-width:1440px;margin:0 auto;padding:14px 10px 60px}
+  .cwrp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px}
+  .ctit{font-family:'Urbanist',sans-serif;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px}
+  .mbc{display:flex;align-items:flex-end;gap:3px;height:52px}
+  .mbar{flex:1;border-radius:3px 3px 0 0;min-height:3px;background:var(--accent);opacity:.7;transition:opacity .2s;cursor:pointer}
+  .mbar:hover{opacity:1}
+  .dtbl{width:100%;border-collapse:collapse;font-size:13px}
+  .dtbl th{background:var(--surface2);color:var(--text3);font-weight:600;text-align:left;padding:8px 11px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .dtbl td{padding:8px 11px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:middle}
+  .dtbl tr:hover td{background:var(--surface2)}
+
+  /* TOAST */
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--accent);color:#fff;padding:9px 20px;border-radius:100px;font-size:13px;font-weight:600;z-index:300;transition:transform .3s cubic-bezier(.4,0,.2,1);pointer-events:none;white-space:nowrap;font-family:'Urbanist',sans-serif}
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  #toast.error{background:var(--danger)}
+  #toast.success{background:var(--success)}
+  .dvdr{height:1px;background:var(--border);margin:10px 0}
+  ::-webkit-scrollbar{width:5px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  @media(max-width:480px){.btxt span{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header class="hdr">
+  <!-- LEFT: Theme + Home -->
+  <div class="hdr-side">
+    <button class="bico" onclick="toggleTheme()" id="tbtn" title="Сменить тему">🌙</button>
+    <a href="index.html" class="bico" title="Главная">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12l9-9 9 9M5 10v9a1 1 0 001 1h4v-5h4v5h4a1 1 0 001-1v-9"/></svg>
+    </a>
+  </div>
+  <!-- CENTER -->
+  <div class="hdr-c">
+    <div class="hdr-title">Daily</div>
+    <div class="hdr-sub">Ежедневный чек-лист</div>
+  </div>
+  <!-- RIGHT: Дневник + Sheets -->
+  <div class="hdr-side">
+    <button class="btxt" onclick="openDiary()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      <span>Дневник</span>
+    </button>
+    <a href="https://docs.google.com/spreadsheets/d/1pTmXMWpOHhNMcFS71umrTqz3HIzhm7l_TpE3utKHr9k/edit" target="_blank" class="bico" title="Открыть Google Таблицу">
+      <svg width="18" height="18" viewBox="0 0 64 64"><rect width="64" height="64" rx="8" fill="#0f9d58"/><rect x="14" y="16" width="36" height="32" rx="3" fill="white" opacity=".12"/><rect x="17" y="19" width="30" height="5" rx="1.5" fill="white"/><rect x="17" y="28" width="30" height="5" rx="1.5" fill="white" opacity=".75"/><rect x="17" y="37" width="30" height="5" rx="1.5" fill="white" opacity=".55"/><rect x="17" y="46" width="18" height="4" rx="1.5" fill="white" opacity=".4"/><line x1="32" y1="19" x2="32" y2="50" stroke="#0f9d58" stroke-width="2.5"/></svg>
+    </a>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- 📅 МОЙ ДЕНЬ -->
+  <div class="sec">
+    <div class="stitle">📅 Мой день</div>
+    <div class="g2" style="margin-bottom:12px">
+      <div class="fld"><div class="flbl">Дата и время</div><div class="fval" id="dt-disp">—</div></div>
+      <div class="fld"><div class="flbl">День недели</div><div class="fval" id="wd-disp">—</div></div>
+    </div>
+    <div class="fld">
+      <div class="flbl" style="display:flex;align-items:center;justify-content:space-between">
+        <span>📰 Важные новости сегодня — США (High Impact)</span>
+        <button class="bsm" onclick="loadNews()" style="margin-left:8px">↻ Обновить</button>
+      </div>
+      <div id="news-box" style="margin-top:4px">
+        <div style="display:flex;align-items:center;gap:8px;color:var(--text3);font-size:13px;padding:6px 0"><div class="spin"></div>Загрузка новостей…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🧠 СОСТОЯНИЕ -->
+  <div class="sec">
+    <div class="stitle">🧠 Состояние</div>
+    <div class="g4">
+      <div class="fld">
+        <div class="flbl">💤 Качество сна</div>
+        <select id="sleep">
+          <option value="">— выбрать —</option>
+          <option value="5">5 (&gt; 8 ч)</option>
+          <option value="4">4 (7–8 ч)</option>
+          <option value="3">3 (6–7 ч)</option>
+          <option value="2">2 (5–6 ч)</option>
+          <option value="1">1 (4–5 ч)</option>
+          <option value="0">0 (&lt; 4 ч)</option>
+        </select>
+        <textarea id="sc" placeholder="Комментарий…"></textarea>
+      </div>
+      <div class="fld">
+        <div class="flbl">🩺 Хорошо ли себя чувствую?</div>
+        <div class="rgrp">
+          <div class="rbtn"><input type="radio" name="feel" id="fy" value="Да"><label for="fy">Да</label></div>
+          <div class="rbtn"><input type="radio" name="feel" id="fn" value="Нет"><label for="fn">Нет</label></div>
+        </div>
+        <textarea id="fc" placeholder="Комментарий…"></textarea>
+      </div>
+      <div class="fld">
+        <div class="flbl">🤔 Настроение</div>
+        <select id="mood" onchange="moodOther()">
+          <option value="">— выбрать —</option>
+          <option value="Бодрое">Бодрое</option>
+          <option value="Загружен">Загружен</option>
+          <option value="Нормальное">Нормальное</option>
+          <option value="Не очень">Не очень</option>
+          <option value="Расстроен">Расстроен</option>
+          <option value="other">Другое…</option>
+        </select>
+        <input type="text" id="mo" placeholder="Введите настроение" style="display:none;margin-top:5px">
+        <textarea id="mc" placeholder="Комментарий…"></textarea>
+      </div>
+      <div class="fld">
+        <div class="flbl">🏃 Активность</div>
+        <div class="rgrp">
+          <div class="rbtn"><input type="radio" name="act" id="ay" value="Да"><label for="ay">Да</label></div>
+          <div class="rbtn"><input type="radio" name="act" id="an" value="Нет"><label for="an">Нет</label></div>
+        </div>
+        <textarea id="ac" placeholder="Комментарий…"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🔍 РЕФЛЕКСИЯ -->
+  <div class="sec">
+    <div class="stitle">🔍 Рефлексия</div>
+    <div class="g2" style="margin-bottom:10px">
+      <div class="fld">
+        <div class="flbl">📋 Есть план?</div>
+        <div class="rgrp" style="margin-bottom:5px">
+          <div class="rbtn"><input type="radio" name="plan" id="py" value="Да"><label for="py">Да</label></div>
+          <div class="rbtn"><input type="radio" name="plan" id="pn" value="Нет"><label for="pn">Нет</label></div>
+        </div>
+        <input type="text" id="po" placeholder="Другое — ручной ввод">
+      </div>
+      <div class="fld">
+        <div class="flbl">📊 Последние 3 сделки</div>
+        <div class="pnlcard" id="pnl"><span style="color:var(--text3);font-size:12px">Нет данных</span></div>
+        <button class="bsm" onclick="loadDeals()" style="margin-top:5px;align-self:flex-start">↻ Обновить</button>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:10px">
+      <div class="fld"><div class="flbl">💭 Как эти результаты на меня влияют?</div><textarea id="ri" placeholder="Ваш ответ…"></textarea></div>
+      <div class="fld"><div class="flbl">🎯 Ради чего я торгую?</div><textarea id="rw" placeholder="Ваш ответ…"></textarea></div>
+    </div>
+    <div class="g2">
+      <div class="fld"><div class="flbl">⚠️ Основная проблема</div><textarea id="rp" placeholder="Ваш ответ…"></textarea></div>
+      <div class="fld"><div class="flbl">✅ Решение</div><textarea id="rs" placeholder="Ваш ответ…"></textarea></div>
+    </div>
+  </div>
+
+  <!-- 💰 АКТИВЫ -->
+  <div class="sec">
+    <div class="stitle">💰 Активы</div>
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">🏦 Финам (₽)</div>
+    <div class="g2" style="margin-bottom:10px">
+      <div class="acrd"><div class="ahdr"><span class="aname">А Финам</span><span class="acur">₽</span></div><input type="number" class="ainp" id="af" placeholder="0"></div>
+      <div class="acrd"><div class="ahdr"><span class="aname">С Финам</span><span class="acur">₽</span></div><input type="number" class="ainp" id="sf" placeholder="0"></div>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">₿ Bybit (USDT)</div>
+    <div class="g2" style="margin-bottom:10px">
+      <div class="acrd"><div class="ahdr"><span class="aname">А Bybit</span><span class="acur">USDT</span></div><input type="number" class="ainp" id="ab" placeholder="0"></div>
+      <div class="acrd"><div class="ahdr"><span class="aname">С Bybit</span><span class="acur">USDT</span></div><input type="number" class="ainp" id="sb" placeholder="0"></div>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">📈 Другие счета</div>
+    <div class="g4" id="xagrid">
+      <div class="acrd">
+        <div class="ahdr">
+          <span class="aname" id="flbl">С Форекс</span>
+          <div style="display:flex;align-items:center;gap:4px">
+            <span class="acur" id="fcur">₽</span>
+            <button class="bsm" onclick="openEdit('forex')">Изменить</button>
+          </div>
+        </div>
+        <input type="number" class="ainp" id="sforex" placeholder="0">
+      </div>
+    </div>
+    <button class="bsm acc" onclick="openAdd()" style="width:100%;display:flex;justify-content:center;gap:6px;padding:8px;margin-top:8px">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+      Добавить счет
+    </button>
+    <div class="dvdr" style="margin:12px 0"></div>
+    <div class="brow">
+      <button class="bpri" onclick="save()">💾 Сохранить</button>
+      <button class="bsec" onclick="clr()">✕ Очистить</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- MODAL EDIT -->
+<div class="movl" id="medit">
+  <div class="mdl">
+    <div class="mtit">Изменить счет</div>
+    <div class="mflds">
+      <div class="fld"><div class="flbl">Название</div><input type="text" id="en" placeholder="Название счета"></div>
+      <div class="fld"><div class="flbl">Валюта счета</div>
+        <select id="ec" onchange="handleCurOther('ec','ecother')">
+          <option value="₽">₽</option>
+          <option value="USDT">USDT</option>
+          <option value="$">$</option>
+          <option value="other">Другое…</option>
+        </select>
+        <input type="text" id="ecother" placeholder="Введите валюту" style="display:none;margin-top:5px">
+      </div>
+    </div>
+    <div class="mbtns">
+      <button class="bpri" onclick="saveEdit()">Сохранить счет</button>
+      <button class="bsec" onclick="closeMdl('medit')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ADD -->
+<div class="movl" id="madd">
+  <div class="mdl">
+    <div class="mtit">Добавить счет</div>
+    <div class="mflds">
+      <div class="fld"><div class="flbl">Название счета</div><input type="text" id="an2" placeholder="Название"></div>
+      <div class="fld"><div class="flbl">Валюта счета</div>
+        <select id="ac2" onchange="handleCurOther('ac2','ac2other')">
+          <option value="₽">₽</option>
+          <option value="USDT">USDT</option>
+          <option value="$">$</option>
+          <option value="other">Другое…</option>
+        </select>
+        <input type="text" id="ac2other" placeholder="Введите валюту" style="display:none;margin-top:5px">
+      </div>
+    </div>
+    <div class="mbtns">
+      <button class="bpri" onclick="saveAdd()">Сохранить счет</button>
+      <button class="bsec" onclick="closeMdl('madd')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIARY -->
+<div id="dlog">
+  <div class="dhdr">
+    <div style="display:flex;gap:6px">
+      <button class="bico" onclick="toggleTheme()" id="dtbtn" title="Тема">🌙</button>
+      <a href="index.html" class="bico" title="Главная"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12l9-9 9 9M5 10v9a1 1 0 001 1h4v-5h4v5h4a1 1 0 001-1v-9"/></svg></a>
+    </div>
+    <div class="dtit">Дневник состояний</div>
+    <div style="display:flex;gap:6px">
+      <button class="btxt" onclick="closeDiary()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M5 12l7-7M5 12l7 7"/></svg>
+        <span>Daily</span>
+      </button>
+      <a href="https://docs.google.com/spreadsheets/d/1pTmXMWpOHhNMcFS71umrTqz3HIzhm7l_TpE3utKHr9k/edit" target="_blank" class="bico" title="Google Таблица">
+        <svg width="17" height="17" viewBox="0 0 64 64"><rect width="64" height="64" rx="8" fill="#0f9d58"/><rect x="17" y="19" width="30" height="5" rx="1.5" fill="white"/><rect x="17" y="28" width="30" height="5" rx="1.5" fill="white" opacity=".75"/><rect x="17" y="37" width="30" height="5" rx="1.5" fill="white" opacity=".55"/><rect x="17" y="46" width="18" height="4" rx="1.5" fill="white" opacity=".4"/><line x1="32" y1="19" x2="32" y2="50" stroke="#0f9d58" stroke-width="2.5"/></svg>
+      </a>
+    </div>
+  </div>
+  <div class="dbdy">
+    <div class="g2" style="margin-bottom:10px">
+      <div class="cwrp"><div class="ctit">💤 Качество сна (14 дней)</div><div class="mbc" id="cs"></div></div>
+      <div class="cwrp"><div class="ctit">🤔 Настроение (14 дней)</div><div class="mbc" id="cm"></div></div>
+    </div>
+    <div class="sec" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table class="dtbl">
+          <thead><tr><th>Дата</th><th>День</th><th>Сон</th><th>Самочувствие</th><th>Настроение</th><th>Активность</th><th></th></tr></thead>
+          <tbody id="dtbody"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Нет записей</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SK='daily_records', AK='daily_accounts', TK='daily_theme';
+const GAS=''; // Google Apps Script URL
+let xaccs=[];
+try{xaccs=JSON.parse(localStorage.getItem(AK)||'[]')}catch(e){}
+let editAcc=null;
+
+(function init(){
+  tick(); setInterval(tick,1000);
+  const t=localStorage.getItem(TK)||'dark';
+  document.documentElement.setAttribute('data-theme',t); setTBtn(t);
+  renderXA(); loadDeals(); loadNews();
+})();
+
+function tick(){
+  const n=new Date(), p=v=>String(v).padStart(2,'0');
+  document.getElementById('dt-disp').textContent=`${p(n.getDate())}.${p(n.getMonth()+1)}.${n.getFullYear()} ${p(n.getHours())}.${p(n.getMinutes())}`;
+  document.getElementById('wd-disp').textContent=['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'][n.getDay()];
+}
+
+function toggleTheme(){
+  const c=document.documentElement.getAttribute('data-theme'), nx=c==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',nx); localStorage.setItem(TK,nx); setTBtn(nx);
+}
+function setTBtn(t){
+  const i=t==='dark'?'☀️':'🌙';
+  ['tbtn','dtbtn'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=i});
+}
+
+function moodOther(){
+  document.getElementById('mo').style.display=document.getElementById('mood').value==='other'?'block':'none';
+}
+
+// NEWS
+async function loadNews(){
+  const box=document.getElementById('news-box');
+  box.innerHTML='<div style="display:flex;align-items:center;gap:8px;color:var(--text3);font-size:13px;padding:6px 0"><div class="spin"></div>Загрузка новостей…</div>';
+  const url='https://www.forexfactory.com/calendar?day=today';
+  const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+  try{
+    const res=await fetch(proxy,{signal:AbortSignal.timeout(9000)});
+    const j=await res.json();
+    const evs=parseFF(j.contents||'');
+    if(evs.length){renderNews(box,evs);return;}
+  }catch(e){}
+  // fallback link
+  box.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="color:var(--text3);font-size:13px">Не удалось загрузить автоматически</span>
+    <a href="https://www.forexfactory.com/calendar?day=today" target="_blank" class="bsm" style="display:inline-flex;align-items:center;gap:5px">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Открыть ForexFactory
+    </a></div>`;
+}
+function parseFF(html){
+  const evs=[];
+  try{
+    const doc=new DOMParser().parseFromString(html,'text/html');
+    // Try table rows
+    doc.querySelectorAll('tr').forEach(row=>{
+      try{
+        const ih=row.innerHTML;
+        const isRed=ih.includes('ff-impact-red')||ih.includes('impact--red')||ih.includes('impact-red');
+        const cur=row.querySelector('.calendar__currency,.currency')?.textContent?.trim();
+        if(!isRed||cur!=='USD')return;
+        const time=row.querySelector('.calendar__time,.time')?.textContent?.trim()||'';
+        const name=(row.querySelector('.calendar__event-title,.calendar__event,.event')?.textContent||'').trim();
+        const fore=(row.querySelector('.calendar__forecast,.forecast')?.textContent||'').trim()||'—';
+        const prev=(row.querySelector('.calendar__previous,.previous')?.textContent||'').trim()||'—';
+        if(name)evs.push({time,name,fore,prev,imp:'high'});
+      }catch(e){}
+    });
+  }catch(e){}
+  return evs;
+}
+function renderNews(box,evs){
+  if(!evs.length){box.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">📭 Сегодня нет событий High Impact по США</div>';return;}
+  let h='<div class="news-list">';
+  evs.forEach(e=>{
+    h+=`<div class="nrow">
+      <div class="nimp ${e.imp}"></div>
+      <div class="ntime">${e.time||'—'}</div>
+      <div class="nname">${e.name}</div>
+      <div class="nprev">${e.fore!=='—'?'Прогноз: '+e.fore:''} ${e.prev!=='—'?'| Пред: '+e.prev:''}</div>
+    </div>`;
+  });
+  h+=`</div><a href="https://www.forexfactory.com/calendar?day=today" target="_blank" class="bsm" style="margin-top:7px;display:inline-flex;align-items:center;gap:5px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Полный календарь</a>`;
+  box.innerHTML=h;
+}
+
+// DEALS
+async function loadDeals(){
+  const b=document.getElementById('pnl');
+  b.innerHTML='<span style="color:var(--text3);font-size:12px">Загрузка…</span>';
+  if(GAS){try{const r=await fetch(`${GAS}?action=getLastDeals`);const d=await r.json();renderPnL(b,d.deals);return;}catch(e){}}
+  const recs=getRecs().filter(r=>r.type==='deal').slice(-3);
+  if(!recs.length){b.innerHTML='<span style="color:var(--text3);font-size:12px">Нет данных о сделках</span>';return;}
+  renderPnLArr(b,recs.map(r=>parseFloat(r.pnl||0)));
+}
+function renderPnLArr(b,pnls){
+  const w=pnls.filter(p=>p>0).length, wr=Math.round(w/pnls.length*100);
+  b.innerHTML=pnls.map((p,i)=>`<div class="pitm"><div class="plbl">Сделка ${i+1}</div><div class="pval ${p>0?'pos':p<0?'neg':'neu'}">${p>0?'+':''}${p.toFixed(2)}</div></div>`).join('')
+    +`<div class="pitm"><div class="plbl">Win Rate</div><div class="pval ${wr>=50?'pos':'neg'}">${wr}%</div></div>`;
+}
+function renderPnL(b,deals){
+  if(!deals?.length){b.innerHTML='<span style="color:var(--text3);font-size:12px">Нет сделок</span>';return;}
+  renderPnLArr(b,deals.map(d=>parseFloat(d.pnl||0)));
+}
+
+// ACCOUNTS
+function openEdit(id){
+  editAcc=id;
+  if(id==='forex'){document.getElementById('en').value=document.getElementById('flbl').textContent;document.getElementById('ec').value=document.getElementById('fcur').textContent;}
+  else{const a=xaccs.find(a=>a.id===id);if(a){document.getElementById('en').value=a.name;setSelectOrOther('ec','ecother',a.currency);}}
+  document.getElementById('medit').classList.add('open');
+}
+function saveEdit(){
+  const n=document.getElementById('en').value.trim(), c=document.getElementById('ec').value==='other'?document.getElementById('ecother').value.trim():document.getElementById('ec').value;
+  if(!n){toast('Введите название','error');return;}
+  if(editAcc==='forex'){document.getElementById('flbl').textContent=n;document.getElementById('fcur').textContent=c;}
+  else{const a=xaccs.find(a=>a.id===editAcc);if(a){a.name=n;a.currency=c;}saveALS();renderXA();}
+  closeMdl('medit');toast('Счет обновлен','success');
+}
+function openAdd(){document.getElementById('an2').value='';document.getElementById('ac2').value='';document.getElementById('madd').classList.add('open');}
+function saveAdd(){
+  const n=document.getElementById('an2').value.trim(), c=(document.getElementById('ac2').value==='other'?document.getElementById('ac2other').value.trim():document.getElementById('ac2').value)||'₽';
+  if(!n){toast('Введите название','error');return;}
+  xaccs.push({id:'acc_'+Date.now(),name:n,currency:c});
+  saveALS();renderXA();closeMdl('madd');toast('Счет добавлен','success');
+}
+function saveALS(){localStorage.setItem(AK,JSON.stringify(xaccs));}
+function renderXA(){
+  const g=document.getElementById('xagrid');
+  while(g.children.length>1)g.removeChild(g.lastChild);
+  xaccs.forEach(a=>{
+    const d=document.createElement('div');d.className='acrd';
+    d.innerHTML=`<div class="ahdr"><span class="aname">${a.name}</span><div style="display:flex;align-items:center;gap:4px"><span class="acur">${a.currency}</span><button class="bsm" onclick="openEdit('${a.id}')">Изменить</button></div></div><input type="number" class="ainp" id="${a.id}" placeholder="0" value="${a.value||''}">`;
+    g.appendChild(d);
+  });
+}
+
+// SAVE/CLEAR
+function getData(){
+  const mv=document.getElementById('mood').value, mood=mv==='other'?document.getElementById('mo').value:mv;
+  const n=new Date(), p=v=>String(v).padStart(2,'0');
+  const xe={};xaccs.forEach(a=>{xe[a.name]=document.getElementById(a.id)?.value||'';});
+  return{
+    datetime:`${p(n.getDate())}.${p(n.getMonth()+1)}.${n.getFullYear()} ${p(n.getHours())}.${p(n.getMinutes())}`,
+    weekday:['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'][n.getDay()],
+    sleep:document.getElementById('sleep').value, sleepC:document.getElementById('sc').value,
+    feel:document.querySelector('input[name="feel"]:checked')?.value||'', feelC:document.getElementById('fc').value,
+    mood, moodC:document.getElementById('mc').value,
+    act:document.querySelector('input[name="act"]:checked')?.value||'', actC:document.getElementById('ac').value,
+    plan:document.querySelector('input[name="plan"]:checked')?.value||document.getElementById('po').value,
+    ri:document.getElementById('ri').value, rw:document.getElementById('rw').value,
+    rp:document.getElementById('rp').value, rs:document.getElementById('rs').value,
+    af:document.getElementById('af').value, sf:document.getElementById('sf').value,
+    ab:document.getElementById('ab').value, sb:document.getElementById('sb').value,
+    sforex:document.getElementById('sforex').value, xe,
+    ts:n.toISOString(), type:'daily'
+  };
+}
+function save(){
+  const d=getData(), recs=getRecs(), key=new Date().toDateString();
+  const i=recs.findIndex(r=>r.type==='daily'&&new Date(r.ts).toDateString()===key);
+  if(i>=0){recs[i]=d;toast('Запись обновлена','success');}else{recs.push(d);toast('Сохранено!','success');}
+  localStorage.setItem(SK,JSON.stringify(recs));
+  if(GAS)fetch(GAS,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveDaily',data:d})}).catch(()=>{});
+}
+function clr(){
+  ['sleep','mood'].forEach(id=>document.getElementById(id).value='');
+  ['sc','fc','mc','mo','ac','po','ri','rw','rp','rs','af','sf','ab','sb','sforex'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.querySelectorAll('input[type=radio]').forEach(r=>r.checked=false);
+  document.getElementById('mo').style.display='none';
+  toast('Форма очищена');
+}
+
+// DIARY
+async function openDiary(){
+  document.getElementById('dlog').classList.add('open');
+  document.getElementById('dtbody').innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)"><div style="display:inline-flex;align-items:center;gap:8px"><div style="width:14px;height:14px;border:2px solid rgba(255,255,255,.08);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div>Загрузка данных…</div></td></tr>';
+  if(typeof CONFIG!=='undefined'&&CONFIG.GAS_URL&&typeof API!=='undefined'){
+    try{
+      const data=await API.getDailyHistory();
+      if(data?.records?.length&&typeof SYNC!=='undefined') SYNC._mergeDaily(data.records,data.headers);
+    }catch(e){}
+  }
+  renderDiary();
+}
+function closeDiary(){document.getElementById('dlog').classList.remove('open');}
+function renderDiary(){
+  const recs=getRecs().filter(r=>r.type==='daily');
+  const tb=document.getElementById('dtbody');
+  if(!recs.length){tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Нет записей</td></tr>';renderCharts([]);return;}
+  tb.innerHTML=[...recs].reverse().map((r,i)=>`<tr><td>${r.datetime||'—'}</td><td>${r.weekday||'—'}</td><td>${r.sleep?'★'.repeat(Math.min(parseInt(r.sleep),5))+' '+r.sleep:'—'}</td><td>${r.feel||'—'}</td><td>${r.mood||'—'}</td><td>${r.act||'—'}</td><td><button class="bsm" onclick="editRec(${recs.length-1-i})">Редактировать</button></td></tr>`).join('');
+  renderCharts(recs.slice(-14));
+}
+function renderCharts(recs){
+  ['cs','cm'].forEach(id=>document.getElementById(id).innerHTML='');
+  const sc=document.getElementById('cs'), mc=document.getElementById('cm');
+  const sc_=['#f05050','#f05050','#f0a050','#f0a050','#3ecf8e','#3ecf8e'];
+  const mm={'Бодрое':5,'Нормальное':4,'Загружен':3,'Не очень':2,'Расстроен':1};
+  recs.forEach(r=>{
+    const sv=parseInt(r.sleep)||0;
+    const sb=document.createElement('div');sb.className='mbar';sb.style.height=`${Math.max(sv/5*100,6)}%`;sb.style.background=sc_[sv]||'#4587f3';sb.title=`${r.datetime}: сон ${sv}`;sc.appendChild(sb);
+    const mv=mm[r.mood]||3;
+    const mb=document.createElement('div');mb.className='mbar';mb.style.height=`${mv/5*100}%`;mb.style.background=mv>=4?'#3ecf8e':mv>=3?'#4587f3':'#f05050';mb.title=`${r.datetime}: ${r.mood}`;mc.appendChild(mb);
+  });
+}
+function editRec(i){
+  const recs=getRecs().filter(r=>r.type==='daily'), r=recs[i];if(!r)return;
+  closeDiary();
+  document.getElementById('sleep').value=r.sleep||'';
+  document.getElementById('sc').value=r.sleepC||'';
+  document.getElementById('mood').value=r.mood||'';
+  document.getElementById('mc').value=r.moodC||'';
+  document.getElementById('fc').value=r.feelC||'';
+  document.getElementById('ac').value=r.actC||'';
+  document.getElementById('po').value=r.plan||'';
+  document.getElementById('ri').value=r.ri||'';
+  document.getElementById('rw').value=r.rw||'';
+  document.getElementById('rp').value=r.rp||'';
+  document.getElementById('rs').value=r.rs||'';
+  document.getElementById('af').value=r.af||'';
+  document.getElementById('sf').value=r.sf||'';
+  document.getElementById('ab').value=r.ab||'';
+  document.getElementById('sb').value=r.sb||'';
+  document.getElementById('sforex').value=r.sforex||'';
+  if(r.feel){const e=document.querySelector(`input[name="feel"][value="${r.feel}"]`);if(e)e.checked=true;}
+  if(r.act){const e=document.querySelector(`input[name="act"][value="${r.act}"]`);if(e)e.checked=true;}
+  window.scrollTo({top:0,behavior:'smooth'});toast('Запись загружена');
+}
+
+
+function handleCurOther(selId, inpId){
+  document.getElementById(inpId).style.display=document.getElementById(selId).value==='other'?'block':'none';
+}
+function setSelectOrOther(selId, inpId, val){
+  const sel=document.getElementById(selId);
+  const opts=['₽','USDT','$'];
+  if(opts.includes(val)){sel.value=val;document.getElementById(inpId).style.display='none';}
+  else{sel.value='other';document.getElementById(inpId).style.display='block';document.getElementById(inpId).value=val;}
+}
+function getRecs(){try{return JSON.parse(localStorage.getItem(SK)||'[]');}catch(e){return[];}}
+function closeMdl(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.movl').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+let _tt;
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show'+(type?' '+type:'');
+  clearTimeout(_tt);_tt=setTimeout(()=>t.className='',3000);
+}
+</script>
+
+<script src="config.js"></script>
+</body>
+</html>
